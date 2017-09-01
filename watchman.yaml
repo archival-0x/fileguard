@@ -7,9 +7,9 @@ event: IN_DELETE
 
 # -- Include action to complete when inode changes -- #
 #    List of actions:                                 
-#      * kill <PROCESS> - kills a process through a POSIX-style process scheduler
-#      * start <PROCESS> - starts a process through a POSIX-style process scheduler
-#      * restart <PROCESS> - restarts a process through a POSIX-style process scheduler
-#      * execute <COMMAND> - execute a user-specified command
-#      * log <CURR_DIR | ROOT>  - create a log of events occuring for a watched inode
-do: `action <ARGUMENT>`
+#      * "kill <PROCESS>" - kills a process through a POSIX-style process scheduler
+#      * "start <PROCESS>" - starts a process through a POSIX-style process scheduler
+#      * "restart <PROCESS>" - restarts a process through a POSIX-style process scheduler
+#      * "execute <COMMAND>" - execute a user-specified command
+#      * "log <CURR_DIR | ROOT>"  - create a log of events occuring for a watched inode
+execute: action <ARGUMENT>
