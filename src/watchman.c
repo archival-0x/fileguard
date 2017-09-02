@@ -1,5 +1,28 @@
 #include "watchman.h"
 
+int check_inode_permissions(char * inode_name){
+  int fd, ret, inode;  
+  struct stat file_stat;
+  
+  /* ERROR CODES:
+  -23   Cannot open file with kernel-style open()
+  -24   Cannot grab file stats
+  -25   No read permission
+  -26   No write permission
+  -27   No execute permission */
+  
+  // Open for reading.
+  fd = open(inode_name, O_RDONLY);
+  if ( fd < 0 ) return -23; // unique number so it doesnt coincide with ino number
+
+  // Grab file_stats
+  ret = fstat (fd, &file_stat);  
+  if (ret < 0) return -24;
+  
+  return file_stat.st_ino;
+}
+
+
 struct file file_check(char * filename){
   // No malloc(), since I gots some unexpected errors. Plus, I don't know when
   // I should be free-ing my memory :(
@@ -25,7 +48,7 @@ struct file file_check(char * filename){
   return f;
 }
 
-Yaml parse_yaml_config(char arg, FILE *fptr){
+struct YAML parse_yaml_config(char arg, FILE *fptr){
   
    yaml_parser_t parser;
    yaml_token_t  token;
@@ -37,17 +60,17 @@ Yaml parse_yaml_config(char arg, FILE *fptr){
    char *tk;
    
    // Create a struct for yaml config parsing.
-   Yaml *config = malloc(sizeof(config));
+   struct YAML config;
    
    // Throw error if parser fails to initialize
    if(!yaml_parser_initialize(&parser)){
-     config->return_flag = false;
-     return *config; 
+     config.return_flag = false;
+     return config; 
    }
    // Throw error if file pointer returns a NULL
    if(fptr == NULL){
-     config->return_flag = false;
-     return *config;
+     config.return_flag = false;
+     return config;
    }
    
    // Set input file
@@ -67,14 +90,14 @@ Yaml parse_yaml_config(char arg, FILE *fptr){
           tk = token.data.scalar.value;
           if (state == 0) {
            if (!strcmp(tk, "inode")) {
-             datap = &config->inode;
+             datap = &config.inode;
            } else if (!strcmp(tk, "event")) {
-             datap = &config->event;
+             datap = &config.event;
            } else if (!strcmp(tk, "execute")) {
-             datap = &config->execute;
+             datap = &config.execute;
            } else {
-             config->return_flag = false;
-             return *config;
+             config.return_flag = false;
+             return config;
            }
          } else {
            *datap = strdup(tk);
@@ -90,7 +113,7 @@ Yaml parse_yaml_config(char arg, FILE *fptr){
    fclose(fptr);
    
    // Set return_flag to true and return config
-   if (arg = 'c') config->return_flag = true; return *config;
+   if (arg = 'c') config.return_flag = true; return config;
    
-   return *config;
+   return config;
 }
