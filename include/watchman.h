@@ -3,6 +3,7 @@
 #define _WATCHMAN_H
 
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <unistd.h>
@@ -30,20 +31,25 @@ struct YAML {
 // checking operations
 struct file {
   int flag;
-  FILE * fpointer;
   char * data;
 }; 
 
 // Function: Used to read a file and file's data
 struct file file_check(char * filename);
 
+// Function: Used to create a file. Return in the form of flag and data.
+struct file create_file(char * filename);
+
 // Function: Checks if user has proper permissions to watch an inode, return inode number
 int check_inode_permissions(char * inode_name);
 
 // Function: Creates a watcher on specified file
-void create_inode_watcher();
+static void create_inode_watcher();
+
+// Function: Outputs inotify event to terminal and libnotify (desktop)
+static void output_events();
 
 // Function: Used to check if YAML configuration has been written correctly.
-struct YAML parse_yaml_config(char arg, FILE *fptr);
+struct YAML parse_yaml_config(char * filename);
 
 #endif

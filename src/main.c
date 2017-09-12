@@ -6,9 +6,9 @@
 #include <glib.h>
 #include <sched.h>
 
-// inotify_events array: we take advantage of this to iteratively check
+// events array: we take advantage of this to iteratively check
 // if a user-specified inode event is within our capabilities
-const char * inotify_events [] = 
+const char * events [] = 
 {
    "IN_ACCESS",             // File accessed
    "IN_ATTRIB",             // Metadata changes
@@ -39,126 +39,116 @@ int main( int argc, char **argv )
 {    
     struct file yaml, inode_check; // target file struct for yaml config
     struct YAML y;
+    struct inotify_event *event;
     
     int c, in, inode_ch; // Return types, etc.
-        
     errno = 0; // Set errno flag to 0
     
     while ((c = getopt (argc, argv, "chd")) != -1)
-    switch (c)
-      {
-      ////////////////////////////////////////////////////////////////////////
-      case 'c':
-        // Creating a check_yml object just for checking
-        
-        printf("Checking YAML config for inconsistencies...\n");
-        
-        // First, check the FILE.
-        yaml = file_check(CONFIG_FILE);
-        if ( yaml.flag < 0){
-          // No perror, since we got back a errno string.
-          fprintf(stderr, "Error %i: Unable to open file: %s\n", yaml.flag, yaml.data);
-        } else {
-          printf("File successfully found and opened!\n");
-        }
-        
-        // Next, check the YAML key-value validity.
-        // Pass a 'c' char to signify that we are only checking the file.
-        y = parse_yaml_config('c', yaml.fpointer);
-              
-        if ( y.return_flag == false){
-          perror("Could not initialize YAML parser. Reason");
-        } else if ( y.return_flag == true ){
-          printf("Successfully parsed YAML file.\n"
-                 "\tinode: %s\n\tevent: %s\n\texecute: %s\n",
-                y.inode, y.event, y.execute);
-        }
-                
-        // Iterate through inotify_events[] array to check if inode specified
-        // is specified. e_flag is set to see if comparisions are valid. If all
-        // are not, last instance of e_flag remains 1, printing to stderr.
-        int e_flag;
-        for ( int i = 0; inotify_events[i] != NULL; i++){
-            if (strcmp(y.event, inotify_events[i]) == 0){
-              e_flag = 0; break; // Break. Event has been matched
-            } else {
-              e_flag = 1; continue; // Set e_flag and continue until end of iterator
-            }
-        }
-        // If e_flag retains 1, then the event isn't found
-        if( e_flag == 1 ) fprintf(stderr, "\nUnknown inode event supplied: %s\n", y.event);
-        else if ( e_flag == 0 ) printf("\ninode event found! Continuing.\n");
-        
-       // Iterate through execute_action to check if execute action matches.
-       // However, we need to first slice the value.
-        char *token, *str, *mem;
-        int x_flag;
-        mem = str = strdup(y.execute);
-        token = strsep(&str, " "); // get first part of string.
-        for ( int i = 0; execute_action[i] != NULL; i++){
-          if (strcmp(token, execute_action[i]) == 0){
-            x_flag = 0; break;
-          } else {
-            x_flag = 1; continue;
-          }
-        }
-        if( x_flag == 1 ) fprintf(stderr, "Unknown command supplied: %s\n", y.execute);
-        else if (x_flag == 0) printf("Command found! Continuing.\n");
-          
-      /* Code reuse, this time we file check y.inode, making sure it exists.
-         When we are actually executing the program, we will instead be calling
-         upon another function, check_inode_permissions(), which we will actually
-         use to return an inode number, using fstat and stat. */
-        
-        inode_check = file_check(y.inode);
-        if ( inode_check.flag < 0){
-          // No perror, since we got back a errno string.
-          fprintf(stderr, "Error %i: Unable to open inode: %s\n", inode_check.flag, inode_check.data);
-        } else {
-          printf("inode successfully found and opened!\n");
-        }
-        
-        // Cleanup, cleanup, everybody everywhere.            
-        free(mem);
-        exit(EXIT_SUCCESS);
-        
+    
+    switch (c){
       ////////////////////////////////////////////////////////////////////////
       case 'h':
         fprintf(stdout, "Usage: (note that these are optional arguments)\n\t %s -[c|h|d]\n\n"
                 "-c : Perform a configuration check on the YAML config file\n"
                 "-d : Delete inode watchers.\n"
                 "-h : Display this help message\n", argv[0]);
-        exit(EXIT_SUCCESS);
-      
-      ////////////////////////////////////////////////////////////////////////
-      case 'd':
-        
-        // TODO: case to reset application or somethin
-        exit(EXIT_SUCCESS);
+        break;    
       default:
-        continue;
-      }
-  
-    // Create a new colorize object
-    // colorize * cv = cz_new(WHITE, "Starting watchman!", RESET, BOLD);
-    // czprint(cv);
+        return 0;
+    }
     
-    /* Throughout this part of the code, we assume that the user has already
-       has already called ./watchman -c in order to perform checking. We are
-       not going to spend time and performance checking for unnecessary things,
-       such as file existence, but actually moving on to creating watchers
-       and calling notify and a process scheduler. */
+    printf("STARTING WATCHMAN!\n");
     
     in = inotify_init();
     if ( in < 0) perror("Could not initialize inotify. Reason");
     
-    FILE *tmptr = fopen(CONFIG_FILE, "r"); //hmmm, a lil repetitive...
-    y = parse_yaml_config('e', tmptr);
+    // Creating a check_yml object just for checking
     
+    printf("Checking YAML config for inconsistencies...\n");
+    
+    // First, check the file.
+    yaml = file_check(CONFIG_FILE);
+    if ( yaml.flag < 0){
+      // No perror, since we got back a errno string.
+      fprintf(stderr, "Error %i: Unable to open file: %s\n", yaml.flag, yaml.data);
+    } else {
+      printf("File successfully found and opened!\n");
+    }
+    
+    // Next, check the YAML key-value validity.
+    y = parse_yaml_config(CONFIG_FILE);
+          
+    if ( y.return_flag == false){
+      perror("Could not initialize YAML parser. Reason");
+    } else if ( y.return_flag == true ){
+      printf("Successfully parsed YAML file.\n"
+             "\tinode: %s\n\tevent: %s\n\texecute: %s\n",
+            y.inode, y.event, y.execute);
+    }
+            
+    // Iterate through events[] array to check if inode specified
+    // is specified. e_flag is set to see if comparisions are valid. If all
+    // are not, last instance of e_flag remains 1, printing to stderr.
+    int e_flag;
+    for ( int i = 0; events[i] != NULL; i++){
+        if (strcmp(y.event, events[i]) == 0){
+          e_flag = 0; break; // Break. Event has been matched
+        } else {
+          e_flag = 1; continue; // Set e_flag and continue until end of iterator
+        }
+    }
+    // If e_flag retains 1, then the event isn't found
+    if( e_flag == 1 ) fprintf(stderr, "\nUnknown inode event supplied: %s\n", y.event);
+    else if ( e_flag == 0 ) printf("\ninode event found! Continuing.\n");
+    
+   // Iterate through execute_action to check if execute action matches.
+   // However, we need to first slice the value.
+    int x_flag;
+    char *prepend, *command, *str, *mem;
+    char *sep = " ";
+    mem = str = strdup(y.execute);
+    
+    // prepend represents the first part of the command string.
+    // We will compare this with the execute_action array.
+    prepend = strtok(str, sep);
+    
+    // This will represent the actual command the user wants to execute
+    command = strtok(NULL, "\"");
+      
+    for ( int i = 0; execute_action[i] != NULL; i++){
+      if (strcmp(prepend, execute_action[i]) == 0){
+        x_flag = 0; break;
+      } else {
+        x_flag = 1; continue;
+      }
+    }
+    
+    //printf("The command is: %s %s\n", prepend, command);
+    
+    if( x_flag == 1 ) fprintf(stderr, "Unknown command supplied: %s\n", y.execute);
+    else if (x_flag == 0) printf("Command found! Continuing.\n");
+    
+    
+    // Use a standard file_check to check for existence of inode.
+    // We will only be using this to treat the inode as a standard file/directory.
+    // Much larger operations will be executed during actual watcher creation.
+    inode_check = file_check(y.inode);
+    if ( inode_check.flag < 0){
+      // No perror, since we got back a errno string.
+      fprintf(stderr, "Error %i: Unable to open inode \"%s\": %s\n", inode_check.flag, y.inode, inode_check.data);
+    } else {
+      printf("inode successfully found and opened!\n");
+    }
+
+     
+   // Cleanup, cleanup, everybody everywhere.
+   free(mem);
+   
+   
+    /*
     inode_ch = check_inode_permissions(y.inode);
-    
-    
-    // Call the janitor.
-    //czclean(cv);
+    if (inode_ch < 0) { printf("Error! Run -c to check before executing!\n"); exit(EXIT_FAILURE);}
+    */
     return 0;
 }

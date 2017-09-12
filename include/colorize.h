@@ -39,6 +39,22 @@ typedef struct colorize {
   color *endcolor; // color of text afterwards ( can be a RESET )  
 } colorize;
 
+/*
+void cz_color(char * color, const char * flag){
+  char * final_color = (char *)malloc(strlen(color) + strlen(flag) + 1);
+  sprintf(final_color, "%s%s%s", PREPEND, flag, color);
+  fprintf(stdout, "%s", final_color);
+  free(final_color);
+}
+
+void cz_reset(){
+  char * reset = (char *)malloc(strlen(RESET) + 1);
+  sprintf(reset, "%s", RESET);
+  fprintf(stdout, "%s", reset);
+  free(reset);
+}
+*/
+
 // Function for declaring a colorized output. For e.g
 // 
 //  colorize * c = cz_new(GREEN, "hello world!", RESET, BOLD);
@@ -55,7 +71,7 @@ colorize *cz_new(color startcolor, char * input, color endcolor, ...){
   // .. optional argument: flag. if not set, set as REGULAR
   c->flag = va_arg(ap, char*);
   
-  if( c-> flag == NULL){
+  if( c->flag == NULL){
     c->flag = REGULAR;
   }
   
@@ -69,33 +85,31 @@ colorize *cz_new(color startcolor, char * input, color endcolor, ...){
 //    czprint(c);
 //
 void czprint(colorize *c){  
-  char * start_color = (char *)malloc(strlen(*c->startcolor) + strlen(RESET));
-  char * end_color = (char *)malloc(strlen(*c->startcolor) + strlen(RESET));
+  char * start_color = (char *)malloc(strlen(*c->startcolor) + strlen(c->flag) + strlen(PREPEND) + 1);
+  char * end_color = (char *)malloc(strlen(*c->endcolor) + strlen(c->flag) + strlen(PREPEND) + 1);
   
   if( *c->startcolor != RESET ){
     sprintf(start_color, "%s%s%s", PREPEND, c->flag, *c->startcolor);
-  } else {
+  } else if( *c->startcolor == RESET ){
     sprintf(start_color, "%s", RESET);
   }
     
   if( *c->endcolor != RESET ){
     sprintf(end_color, "%s%s%s", PREPEND, c->flag, *c->endcolor);
-  }else {
-    strcat(end_color, RESET);
+  }else if( *c->endcolor == RESET ){
+    // realloc()?
+    strcat(end_color, RESET); 
   }
   
-  char * color_string = (char *)malloc(strlen(c->input) + strlen(start_color) + strlen(end_color)); // TODO: reallocate.
+  char * color_string = (char *)malloc(strlen(c->input) + strlen(start_color) + strlen(end_color) + 1);
   
   strcat(color_string, start_color);
   strcat(color_string, c->input);
   strcat(color_string, end_color);
-
   
   fprintf(stdout, "%s\n", color_string);
   
-  free(start_color);
-  free(end_color);
-  free(color_string);
+  free(start_color); free(end_color); free(color_string);
 }
 
 // Free allocated memory!

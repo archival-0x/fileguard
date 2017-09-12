@@ -1,54 +1,62 @@
 #include "watchman.h"
 
 int check_inode_permissions(char * inode_name){
-  int fd, ret, inode;  
   struct stat file_stat;
+  int fd, ac; 
   
-  /* ERROR CODES:
-  -23   Cannot open file with kernel-style open()
-  -24   Cannot grab file stats
-  -25   No read permission
-  -26   No write permission
-  -27   No execute permission */
-  
-  // Open for reading.
-  fd = open(inode_name, O_RDONLY);
-  if ( fd < 0 ) return -23; // unique number so it doesnt coincide with ino number
+  // Check if user can access inode through read and write
+  ac = access(inode_name, R_OK | W_OK);
+  if( !(ac < 0) ){
+    
+    // Open for reading.
+    fd = open(inode_name, O_RDONLY , 0644 );
+    
+    // Grab file_stats for log
+    fstat (fd, &file_stat); 
+    
+    return file_stat.st_ino;
+  } else {
+    return ac; // -1
+  }
 
-  // Grab file_stats
-  ret = fstat (fd, &file_stat);  
-  if (ret < 0) return -24;
-  
-  return file_stat.st_ino;
 }
 
 
 struct file file_check(char * filename){
-  // No malloc(), since I gots some unexpected errors. Plus, I don't know when
-  // I should be free-ing my memory :(
+
   struct file f;
   int fd, len;
   void *data;
   
-  // Not the best, but we are creating a FILE pointer for the sake of libyaml.
-  // We also use this to conduct initial error checking.
-  FILE *fptr = fopen(filename, "r");
-  if (!fptr){
-    f.flag = -1; f.fpointer = NULL, f.data = strerror(errno);
-    return f;
-  }
-  
   // POSIX-style file-opening. Better for performance, but repetitive.
-  fd = open(filename, O_RDONLY);
+  fd = open(filename, O_RDONLY, 0644);
+  // If fd is negative, return error
+  if (fd < 0 ) { f.data = strerror(errno); f.flag = fd; return f;}
   len = lseek(fd, 0, SEEK_END);
   data = mmap(0, len, PROT_READ, MAP_PRIVATE, fd, 0);
   
-  f.flag = 0; f.fpointer = fptr; f.data = data;
+  f.flag = fd; f.data = data;
   
   return f;
 }
 
-struct YAML parse_yaml_config(char arg, FILE *fptr){
+struct file create_file(char * filename){
+  struct file f;
+  
+  char *path = malloc(strlen(filename) + 1 );
+  path = strcpy(path, filename);
+
+  int fd = open(path, O_RDWR | O_APPEND | O_CREAT);   
+  if ( fd < 0) { 
+    f.flag = fd; f.data = strerror(errno); return f;
+  }
+  
+  f.flag = fd; f.data = filename;
+  free(path);
+  return f;
+}
+
+struct YAML parse_yaml_config(char * filename){
   
    yaml_parser_t parser;
    yaml_token_t  token;
@@ -58,6 +66,8 @@ struct YAML parse_yaml_config(char arg, FILE *fptr){
    int state = 0;
    char ** datap;
    char *tk;
+   
+   FILE *fptr = fopen(filename, "r");
    
    // Create a struct for yaml config parsing.
    struct YAML config;
@@ -112,8 +122,6 @@ struct YAML parse_yaml_config(char arg, FILE *fptr){
    yaml_parser_delete(&parser);
    fclose(fptr);
    
-   // Set return_flag to true and return config
-   if (arg = 'c') config.return_flag = true; return config;
-   
+   config.return_flag = true;
    return config;
 }
