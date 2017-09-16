@@ -3,7 +3,7 @@ inode: /root/my_inode
 
 # -- Include an action that signifies change in an inode -- #
 #    For more information: http://man7.org/linux/man-pages/man7/inotify.7.html 
-event: IN_DELETE
+event: IN_ALL_EVENTS
 
 # -- Include action to complete when inode changes -- #
 #    List of actions:                                 
@@ -12,4 +12,4 @@ event: IN_DELETE
 #      * restart <PROCESS> - restarts a process through a POSIX-style process scheduler
 #      * execute "<COMMAND>" - execute a user-specified command
 #      * log <CURR_DIR | ROOT>  - create a log of events occuring for a watched inode
-execute: execute "ls -al"
+execute: log "/root/watchman.log"

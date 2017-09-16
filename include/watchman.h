@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <unistd.h>
 #include <errno.h>
@@ -21,7 +22,8 @@
 #include <sched.h>
 
 #define CONFIG_FILE "watchman.yaml"
-
+#define BUF_LEN (10 * (sizeof(struct inotify_event) + NAME_MAX + 1))
+#define DEFAULT_FILENAME "/root/watchman.log"
 
 // Yaml struct: Used to define key values that are to be returned when parsing
 // a standard watchman configuration file
@@ -43,16 +45,19 @@ struct file {
 struct file file_check(char * filename);
 
 // Function: Used to create a file. Return in the form of flag and data.
-struct file create_file(char * filename);
+struct file create_file(char * filename, char *data);
 
 // Function: Checks if user has proper permissions to watch an inode, return inode number
 int check_inode_permissions(char * inode_name);
 
-// Function: Creates a watcher on specified file
-void create_inode_watcher(char * event, char * inode, int fd);
-
 // Function: Outputs inotify event to terminal and libnotify (desktop)
-NotifyNotification raise_notification()
+NotifyNotification raise_notification();
+
+// Function: Parses inotify event into uint32_t
+uint32_t parse_event(char * event);
+
+// Function: Print specific inotify event in the case of IN_ALL_EVENTS
+void display_event(struct inotify_event *i);
 
 // TODO: Create a function for scheduler
 
