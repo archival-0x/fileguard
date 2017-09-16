@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdbool.h>
 #include <unistd.h>
 #include <errno.h>
@@ -14,6 +15,10 @@
 #include <sys/wait.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <libnotify/notify.h>
+#include <sys/inotify.h>
+#include <glib.h>
+#include <sched.h>
 
 #define CONFIG_FILE "watchman.yaml"
 
@@ -44,10 +49,12 @@ struct file create_file(char * filename);
 int check_inode_permissions(char * inode_name);
 
 // Function: Creates a watcher on specified file
-static void create_inode_watcher();
+void create_inode_watcher(char * event, char * inode, int fd);
 
 // Function: Outputs inotify event to terminal and libnotify (desktop)
-static void output_events();
+NotifyNotification raise_notification()
+
+// TODO: Create a function for scheduler
 
 // Function: Used to check if YAML configuration has been written correctly.
 struct YAML parse_yaml_config(char * filename);

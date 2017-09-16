@@ -21,6 +21,36 @@ int check_inode_permissions(char * inode_name){
 
 }
 
+// create_inode_watcher will be running the entirety of the application.
+// therefore, this function is crucial and must create and cleanup
+void create_inode_watcher(char * event, char * inode, int fd){
+	
+  struct inotify_event *ev;
+	
+  // Construct unsigned mask from event string for add_watch
+  uint32_t mask = atoi(event);
+  NotifyNotification *notification;
+
+  //  ADD A FILE WATCHHHHH!
+  int wd = inotify_add_watch(fd, inode, mask);
+  if ( wd < 0) { 
+    perror("Could not add watch. Reason");
+  }
+  
+  
+  // Cleanup and remove the watch.
+  inotify_rm_watch(fd, wd);
+  
+}
+
+NotifyNotification raise_notification(){
+  
+  // TODO: create notify, show it, and close it. 
+  
+  notify_notification_new();
+  notify_notification_show();
+  notify_notification_close ();
+}
 
 struct file file_check(char * filename){
 

@@ -1,10 +1,6 @@
 #include "watchman.h"
 #include "colorize.h"
 
-#include <libnotify/notify.h>
-#include <sys/inotify.h>
-#include <glib.h>
-#include <sched.h>
 
 // events array: we take advantage of this to iteratively check
 // if a user-specified inode event is within our capabilities
@@ -41,8 +37,10 @@ int main( int argc, char **argv )
     struct YAML y;
     struct inotify_event *event;
     
-    int c, in, inode_ch; // Return types, etc.
+    int c, in, inode_i; // Return types, etc.
     errno = 0; // Set errno flag to 0
+    
+    gboolean nint;
     
     while ((c = getopt (argc, argv, "chd")) != -1)
     
@@ -60,16 +58,21 @@ int main( int argc, char **argv )
     
     printf("STARTING WATCHMAN!\n");
     
+    // Initialize inotify
     in = inotify_init();
     if ( in < 0) perror("Could not initialize inotify. Reason");
     
-    // Creating a check_yml object just for checking
-    
-    printf("Checking YAML config for inconsistencies...\n");
+    // Initialize libnotify
+    nint = notify_init("Watchman");
+    if (nint == FALSE) perror("Could not initialize libnotify. Reason");
     
     // First, check the file.
     yaml = file_check(CONFIG_FILE);
     if ( yaml.flag < 0){
+      // Create an empty config file, then throw error
+      struct file new_file;
+      new_file = create_file(CONFIG_FILE);
+      
       // No perror, since we got back a errno string.
       fprintf(stderr, "Error %i: Unable to open file: %s\n", yaml.flag, yaml.data);
     } else {
@@ -104,10 +107,11 @@ int main( int argc, char **argv )
     
    // Iterate through execute_action to check if execute action matches.
    // However, we need to first slice the value.
-    int x_flag;
-    char *prepend, *command, *str, *mem;
-    char *sep = " ";
-    mem = str = strdup(y.execute);
+   
+    int x_flag; // Set a flag to dictate success failure 
+    char *prepend, *command, *str, *mem; // set strings as tokens
+    char *sep = " "; // seperator for tokenizing
+    mem = str = strdup(y.execute); // allocate memory, also create a copy
     
     // prepend represents the first part of the command string.
     // We will compare this with the execute_action array.
@@ -124,11 +128,8 @@ int main( int argc, char **argv )
       }
     }
     
-    //printf("The command is: %s %s\n", prepend, command);
-    
     if( x_flag == 1 ) fprintf(stderr, "Unknown command supplied: %s\n", y.execute);
     else if (x_flag == 0) printf("Command found! Continuing.\n");
-    
     
     // Use a standard file_check to check for existence of inode.
     // We will only be using this to treat the inode as a standard file/directory.
@@ -139,16 +140,18 @@ int main( int argc, char **argv )
       fprintf(stderr, "Error %i: Unable to open inode \"%s\": %s\n", inode_check.flag, y.inode, inode_check.data);
     } else {
       printf("inode successfully found and opened!\n");
+      // Check for permission
+      inode_i = check_inode_permissions(y.inode);
+      if (inode_i < 0) { perror("Permission check for inode failed! Reason"); }
     }
-
+    
+    // Passes: event, inode, fd
+    create_inode_watcher(y.event, y.inode, in);
      
    // Cleanup, cleanup, everybody everywhere.
    free(mem);
+   notify_uninit();
    
    
-    /*
-    inode_ch = check_inode_permissions(y.inode);
-    if (inode_ch < 0) { printf("Error! Run -c to check before executing!\n"); exit(EXIT_FAILURE);}
-    */
     return 0;
 }
