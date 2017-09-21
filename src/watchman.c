@@ -21,7 +21,7 @@ int check_inode_permissions(char * inode_name){
 
 }
 
-NotifyNotification raise_notification(){
+NotifyNotification raise_notification(const char * timeinfo, const char *event){
 
   // Initialize libnotify
   gboolean nint;
@@ -31,11 +31,11 @@ NotifyNotification raise_notification(){
     perror("Could not initialize libnotify. Reason");
   }
   
-  // TODO: create notify, show it, and close it. 
+  NotifyNotification * display = notify_notification_new(timeinfo, event, NULL);
+  notify_notification_show(display, NULL);
   
-  //notify_notification_new();
-  //notify_notification_show();
-  //notify_notification_close();
+  // Close after delay!
+  //notify_notification_close(display, NULL);
   
   notify_uninit();
 
@@ -68,23 +68,21 @@ uint32_t parse_event(char * event){
 // the event mask is IN_ALL_EVENTS, we should be able to print the specific
 // event that occurred.
 // Thanks: http://man7.org/tlpi/code/online/diff/inotify/demo_inotify.c.html
-void display_event(struct inotify_event *i){
-    if (i->mask & IN_ACCESS)        printf("IN_ACCESS");
-    if (i->mask & IN_ATTRIB)        printf("IN_ATTRIB");
-    if (i->mask & IN_CLOSE_WRITE)   printf("IN_CLOSE_WRITE");
-    if (i->mask & IN_CLOSE_NOWRITE) printf("IN_CLOSE_NOWRITE");
-    if (i->mask & IN_CREATE)        printf("IN_CREATE");
-    if (i->mask & IN_DELETE)        printf("IN_DELETE");
-    if (i->mask & IN_DELETE_SELF)   printf("IN_DELETE_SELF");
-    if (i->mask & IN_MODIFY)        printf("IN_MODIFY");
-    if (i->mask & IN_MOVE_SELF)     printf("IN_MOVE_SELF");
-    if (i->mask & IN_MOVED_FROM)    printf("IN_MOVED_FROM ");
-    if (i->mask & IN_MOVED_TO)      printf("IN_MOVED_TO");
-    if (i->mask & IN_OPEN)          printf("IN_OPEN");
-    if (i->mask & IN_UNMOUNT)       printf("IN_UNMOUNT");
-    printf(" occurred!\n");
+const char * display_event(struct inotify_event *i){
+    if (i->mask & IN_ACCESS)        printf("IN_ACCESS occurred!\n"); return "IN_ACCESS";
+    if (i->mask & IN_ATTRIB)        printf("IN_ATTRIB occurred!\n"); return "IN_ATTRIB";
+    if (i->mask & IN_CLOSE_WRITE)   printf("IN_CLOSE_WRITE occurred!\n"); return "IN_CLOSE_WRITE";
+    if (i->mask & IN_CLOSE_NOWRITE) printf("IN_CLOSE_NOWRITE occurred!\n"); return "IN_CLOSE_NOWRITE";
+    if (i->mask & IN_CREATE)        printf("IN_CREATE occurred!\n"); return "IN_CREATE";
+    if (i->mask & IN_DELETE)        printf("IN_DELETE occurred!\n"); return "IN_DELETE";
+    if (i->mask & IN_DELETE_SELF)   printf("IN_DELETE_SELF occurred!\n"); return "IN_DELETE_SELF";
+    if (i->mask & IN_MODIFY)        printf("IN_MODIFY occurred!\n"); return "IN_MODIFY";
+    if (i->mask & IN_MOVE_SELF)     printf("IN_MOVE_SELF occurred!\n"); return "IN_MOVE_SELF";
+    if (i->mask & IN_MOVED_FROM)    printf("IN_MOVED_FROM occurred!\n"); return "IN_MOVED_FROM ";
+    if (i->mask & IN_MOVED_TO)      printf("IN_MOVED_TO occurred!\n"); return "IN_MOVED_TO";
+    if (i->mask & IN_OPEN)          printf("IN_OPEN occurred!\n"); return "IN_OPEN";
+    if (i->mask & IN_UNMOUNT)       printf("IN_UNMOUNT occurred!\n"); return "IN_UNMOUNT";
 }
-
 
 
 struct file file_check(char * filename){
@@ -117,12 +115,21 @@ struct file create_file(char * filename, char * data){
   }
   
   if (data != NULL){
-    write(fd, data, sizeof(data + 1)); 
+    // Yikes...
+    //write(fd, data, sizeof(data + 1));
+    dprintf(fd, "%s", data);
   }
   
   f.flag = fd; f.data = filename;
   free(path);
   return f;
+}
+
+struct tm * gettime(time_t rawtime){
+  time ( &rawtime );
+  struct tm * timeinfo = localtime ( &rawtime );
+  
+  return timeinfo;
 }
 
 struct YAML parse_yaml_config(char * filename){
@@ -131,7 +138,7 @@ struct YAML parse_yaml_config(char * filename){
    yaml_token_t  token;
    
    // Declare variables for tokenizer
-   // Credit: https://stackoverflow.com/questions/20628099/parsing-yaml-to-values-with-libyaml-in-c
+   // Source: https://stackoverflow.com/questions/20628099/parsing-yaml-to-values-with-libyaml-in-c
    int state = 0;
    char ** datap;
    char *tk;

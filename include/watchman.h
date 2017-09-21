@@ -9,6 +9,7 @@
 #include <signal.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <time.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <yaml.h>
@@ -19,7 +20,6 @@
 #include <libnotify/notify.h>
 #include <sys/inotify.h>
 #include <glib.h>
-#include <sched.h>
 
 #define CONFIG_FILE "watchman.yaml"
 #define BUF_LEN (10 * (sizeof(struct inotify_event) + NAME_MAX + 1))
@@ -51,15 +51,16 @@ struct file create_file(char * filename, char *data);
 int check_inode_permissions(char * inode_name);
 
 // Function: Outputs inotify event to terminal and libnotify (desktop)
-NotifyNotification raise_notification();
+NotifyNotification raise_notification(const char * timeinfo, const char *event);
 
 // Function: Parses inotify event into uint32_t
 uint32_t parse_event(char * event);
 
 // Function: Print specific inotify event in the case of IN_ALL_EVENTS
-void display_event(struct inotify_event *i);
+const char * display_event(struct inotify_event *i);
 
-// TODO: Create a function for scheduler
+// Function: Get local time
+struct tm * gettime(time_t rawtime);
 
 // Function: Used to check if YAML configuration has been written correctly.
 struct YAML parse_yaml_config(char * filename);

@@ -31,13 +31,30 @@ const char * execute_action[] =
   "kill", "start", "restart", "execute", "log",  
 };
 
-// Global signal counter variable
-unsigned int sc = 0;
+
+
+// Global signal counter variable, with sig_atomic_t typedef
+volatile sig_atomic_t sc = true;
+// Global file descriptors for both main() and cleanup() to access
+int fd, wd;
+// Global mem created by strdup() for both main() and cleanup() to access
+char * mem;
+
 
 // catch_sig() is made local to program to interact with sc counter.
 void catch_sig(int s){
-   printf("Caught signal %d!\n", s);
-   sc += s;
+   if (s == SIGINT || s == SIGTERM){
+     printf("SIGINT caught! Cleaning up...\n", s);
+     sc = false; 
+     exit(EXIT_SUCCESS);
+   }
+}
+
+// cleanup() is made local to program so that memory can be freed
+void cleanup(void){
+  // Cleanup, cleanup, everybody everywhere.
+  inotify_rm_watch(fd, wd);
+  free(mem);   
 }
 
 
@@ -52,26 +69,27 @@ int main( int argc, char **argv )
     
     char buf[BUF_LEN] __attribute__ ((aligned(8)));   // buffer for events
     char *p;                                          // char to check against buf when checking for events
-    char *prepend, *command, *str, *mem;              // set yaml tokens into readable strings
+    char *prepend, *command, *str;                    // set yaml tokens into readable strings
     char *sep = " ";                                  // seperator for tokenizing
     
-    int fd, wd, rd;                                   // return values for file descriptors
+    int rd;                                           // return value for local file descriptors
     int c, in, inode_i;                               // various return types when checking
     int x_flag, e_flag;                               // flags for checking against global arrays
-    
-    NotifyNotification *notification;                 // libnotify instance
+
     errno = 0;                                        // Set errno flag to 0
 
-
-
+    
+    atexit(cleanup);
+    signal(SIGINT, catch_sig);
+    signal(SIGTERM, catch_sig);
+    
+    // TODO: introduce new arguments, such as cleanup, delete inode, etc.
     while ((c = getopt (argc, argv, "h")) != -1)
     switch (c){
       case 'h':
-        fprintf(stdout, "Usage: (note that these are optional arguments)\n\t %s -[c|h|d]\n\n"
-                "-c : Perform a configuration check on the YAML config file\n"
-                "-d : Delete inode watchers.\n"
+        fprintf(stdout, "Usage: (note that these are optional arguments)\n\t %s -[h]\n\n"
                 "-h : Display this help message\n", argv[0]);
-        break;    
+        exit(EXIT_SUCCESS); 
       default:
         return 0;
     }
@@ -178,15 +196,11 @@ int main( int argc, char **argv )
     if ( wd < 0) { 
       perror("Could not add watch. Reason");
     }
-      
+    
     // Starting looping and watching for events!
     // BREAK on interrupt!! Important so that program can finish execution
     // by freeing memory and removing watcher
-    for (;;) {
-      signal(SIGINT, catch_sig);
-
-      if (sc != 0 ) break;
-      
+    while (sc) {      
       rd = read(fd, buf, BUF_LEN);
       
       if (rd == 0) fprintf(stdout, "read() tossed back a 0");
@@ -197,38 +211,64 @@ int main( int argc, char **argv )
       }
 
       for (p = buf; p < buf + rd; ) {
-          ev = (struct inotify_event *) p;
-          display_event(ev);
+          // Made local so that data gets re-initialized within scope
+          struct tm * timeinfo;                             
+          time_t rawtime;           
+          char *ltime, *eventstr;
+          const char *event;                            
           
-          if( prepend == "execute" ){          
+          // Get time, create new str;                       
+          timeinfo = gettime(rawtime);
+          ltime = asctime(timeinfo);
+          
+          ev = (struct inotify_event *) p;
+          
+          // Print the event in terminal
+          event = display_event(ev);
+          
+          // Raise a notification
+          // message: timeinfo (as string)
+          // body: event that occurred
+          raise_notification(ltime, event);
+          
+          // Create dynamically allocated event string
+          // Source: https://stackoverflow.com/questions/5901181/c-string-append
+          if((eventstr = malloc(strlen(ltime) + strlen(event) + 2)) != NULL){
+            eventstr[0] = '\0';   // ensures the memory is an empty string
+            strcat(eventstr, ltime);
+            strcat(eventstr, event);
+            strcat(eventstr, "\n");                      
+          } else {
+            perror("malloc failed. Reason");
+            exit(EXIT_FAILURE);
+          }
+          
+          if(strcmp(prepend, "execute") == 0){
             int ret = system(command);
             if (WIFSIGNALED(ret) && (WTERMSIG(ret) == SIGINT || WTERMSIG(ret) == SIGQUIT)){
               break;
             }
-          } else if ( prepend == "log" ){
-            printf("Creating log file\n");
+          } else if (strcmp(prepend, "log") == 0 ){
+            // If path is none, use default.
             if (command == NULL) {
               command = DEFAULT_FILENAME;
             }
-            struct file tmpLog = create_file(command, "test string");
+            
+            // Create a log file, with contents of eventstr
+            struct file tmpLog = create_file(command, eventstr);
             if (tmpLog.flag < 0 ){
               fprintf(stderr, "Couldn't create log file. Reason: %s\n", tmpLog.data);
               exit(EXIT_FAILURE);
             }
-          }
-          
-          
+          } else {
+            printf("Skipped.\n");
+            
+          }      
           p += sizeof(struct inotify_event) + ev->len;
+          
+          free(eventstr);
       }
-    
-    
-    
-    
     }
     
-    
-    // Cleanup, cleanup, everybody everywhere.
-    inotify_rm_watch(fd, wd);
-    free(mem);   
-    return 0;
+    exit(EXIT_SUCCESS);
 }
