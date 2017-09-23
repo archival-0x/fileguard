@@ -41,6 +41,9 @@ struct file {
   char * data;
 }; 
 
+// Function: print help / usage
+void usage(char * application_name);
+
 // Function: Used to read a file and file's data
 struct file file_check(char * filename);
 
@@ -64,5 +67,11 @@ struct tm * gettime(time_t rawtime);
 
 // Function: Used to check if YAML configuration has been written correctly.
 struct YAML parse_yaml_config(char * filename);
+
+// Function: Used to turn char into array for execvp()
+void parse_execute(char * line, char ** argv);
+
+// Function: Execute command with fork() and execvp()
+int execute_command(char **argv);
 
 #endif

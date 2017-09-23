@@ -19,13 +19,20 @@ Because of an error when compiling with `libglib2` relating to the `libgdk-pixbu
 
     $ sudo ln -s /usr/include/gdk-pixbuf-2.0/gdk-pixbuf /usr/include/gtk-2.0/gdk-pixbuf
 
-__watchman__ also contains [libcolorize](https://github.com/ex0dus-0x/libcolorize), which is a library that I have written for displaying colorized outputs. Since the library is  portable, it has already been `include`d.
-
 To run:
     
     $ git clone https://github.com/ex0dus-0x/watchman.git && cd watchman
     $ make
-    $ ./watchman 
+    $ ./watchman -h
+    
+    Usage: (note that these are optional arguments)
+    	 ./watchman -[h|v]
+
+    -h : Display this help message
+    -v : Turns ON verbosity
+
+Running `./watchman` will automatically default to the `watchman.yaml` file within this source directory. However, you may specify your own `.yaml` config by specifying it as an argument `./watchman another.yaml`.
+
 
 ## Configuration
 
@@ -72,6 +79,8 @@ This example config file prints "Hello world!" to the terminal when a `IN_ACCESS
 
 ## TODO:
 
-[ ] Write `kill`, `start`, `restart` code for process scheduling
-[ ] Optionally specify custom `.yaml` file as command line argument
-[ ] Specify YAML option for triggering `libnotify` notification
+* [] Write `kill`, `start`, `restart` code for process scheduling
+* [x] Optionally specify custom `.yaml` file as command line argument
+* [] Specify YAML option for triggering `libnotify` notification
+* [x] Replace `system()` with `fork()` and `execvp()`
+* [] Watch multiple inodes

@@ -1,5 +1,15 @@
 #include "watchman.h"
 
+void usage(char * application_name){
+  fprintf(stdout, "Usage: (note that these are optional arguments)\n\t %s -[h|v] <other.yaml>\n\n"
+          "-h : Display this help message\n"
+          "-v : Turns ON verbosity\n"        
+          ,application_name);
+  exit(EXIT_SUCCESS);
+}
+
+
+
 int check_inode_permissions(char * inode_name){
   struct stat file_stat;
   int fd, ac; 
@@ -200,4 +210,29 @@ struct YAML parse_yaml_config(char * filename){
    
    config.return_flag = true;
    return config;
+}
+
+void parse_execute(char * line, char ** argv){
+  while (*line != '\0') {       
+    while (*line == ' ' || *line == '\t' || *line == '\n')
+         *line++ = '\0';    
+    *argv++ = line;          
+    while (*line != '\0' && *line != ' ' && 
+           *line != '\t' && *line != '\n') 
+         line++;             
+     }
+     *argv = '\0';             
+}
+
+int execute_command(char **argv){
+    pid_t  pid; // child process id
+    int    status; // status
+
+    if ((pid = fork()) < 0) {    
+       return -1;
+    } else if (pid == 0) {         
+       if (execvp(*argv, argv) < 0) { return -1; }
+    } else {  while (wait(&status) != pid); }
+    
+    return 0;
 }
