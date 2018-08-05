@@ -1,5 +1,5 @@
 # -- Sets inode to be watched by inotify -- #
-inode: /root/my_inode 
+inode: my_inode 
 
 # -- Include an action that signifies change in an inode -- #
 #    For more information: http://man7.org/linux/man-pages/man7/inotify.7.html 

@@ -79,8 +79,8 @@ This example config file prints "Hello world!" to the terminal when a `IN_ACCESS
 
 ## TODO:
 
-* [] Write `kill`, `start`, `restart` code for process scheduling
+* [ ] Write `kill`, `start`, `restart` code for process scheduling
 * [x] Optionally specify custom `.yaml` file as command line argument
-* [] Specify YAML option for triggering `libnotify` notification
+* [ ] Specify YAML option for triggering `libnotify` notification
 * [x] Replace `system()` with `fork()` and `execvp()`
-* [] Watch multiple inodes
+* [ ] Watch multiple inodes

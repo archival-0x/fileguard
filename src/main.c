@@ -1,45 +1,25 @@
-#include "watchman.h"
+#include "main.h"
 
-// events array: we take advantage of this to iteratively check
-// if a user-specified inode event is within our capabilities
-const char * events [] = 
+/*
+ * displays help and usage
+ */
+static void 
+usage(char * application_name)
 {
-   "IN_ACCESS",             // File accessed
-   "IN_ATTRIB",             // Metadata changes
-   "IN_CLOSE_WRITE",        // File opened for writing was closed.
-   "IN_CLOSE_NOWRITE",      // File or directory not opened for writing was closed.
-   "IN_CREATE",             // File/directory created
-   "IN_DELETE",             // File/directory deleted
-   "IN_DELETE_SELF",        // Watched inode deleted
-   "IN_MODIFY",             // File modified
-   "IN_MOVE_SELF",          // Watched inode moved
-   "IN_MOVED_FROM",         // Directory with old filename when a file is renamed.
-   "IN_MOVED_TO",           // Directory with new filename when a file is renamed.
-   "IN_OPEN",               // File/directory is opened
-   "IN_UNMOUNT",            // Filesystem unmounted
-   "IN_ALL_EVENTS",         // In all events (except IN_UNMOUNT)
-};
+    /* print help to STDOUT */
+    fprintf(stdout, "Usage: (note that these are optional arguments)\n\t %s -[h|v] <other.yaml>\n\n"
+            "-h : Display this help message\n"
+            "-v : Turns ON verbosity\n"
+            , application_name);
+}
 
-// execute_action array: this is a list of commands one can execute once inotify
-// catches an event.
-const char * execute_action[] = 
+/*
+ * function routine that continously listens and catches
+ * for user-supplied SIGINTs or SIGTERMs and exits
+ */
+static void 
+catch_sig(int s)
 {
-  // NOTE that kill, start, and restart all deal with processes and the
-  // process scheduler. 
-  "kill", "start", "restart", "execute", "log",  
-};
-
-
-// Global signal counter variable, with sig_atomic_t typedef
-volatile sig_atomic_t sc = true;
-// Global file descriptors for both main() and cleanup() to access
-int fd, wd;
-// Global mem created by strdup() for both main() and cleanup() to access
-char * mem;
-
-
-// catch_sig() is made local to program to interact with sc counter.
-void catch_sig(int s){
    if (s == SIGINT || s == SIGTERM){
      printf("SIGINT caught! Cleaning up...\n", s);
      sc = false; 
@@ -47,254 +27,304 @@ void catch_sig(int s){
    }
 }
 
-// cleanup() is made local to program so that memory can be freed
-void cleanup(void){
-  // Cleanup, cleanup, everybody everywhere.
+/*
+ * cleanup routine run by atexit() in order to
+ * safely clean up memory and close fds
+ */
+static void 
+cleanup(void)
+{
+  /* remove watch on file descriptor */
   inotify_rm_watch(fd, wd);
+  /* free heap-allocated block of memory */
   free(mem);   
 }
 
 
-int main( int argc, char **argv )
+int 
+main(int argc, char **argv)
 {   
-    struct file yaml, inode_check;                    // target file struct for yaml config
-    struct YAML y;                                    // return tokenized yaml
-    struct inotify_event *ev;                         // inotify_event struct
+    file_t yaml, inode_check;                         /* target file struct for yaml config */
+    yaml_t y;                                         /* returns a tokenized yaml */
+    struct inotify_event *ev;                         /* represents a inotify_event struct */
     
-    uint32_t mask;                                    // convert event -> unsigned 32 int
+    uint32_t mask;                                    /* used for bitmasking such that event becomes uint32_t */
     
-    char buf[BUF_LEN] __attribute__ ((aligned(8)));   // buffer for events
-    char *p;                                          // char to check against buf when checking for events
-    char *prepend, *command, *str;                    // set yaml tokens into readable strings
-    char *sep = " ";                                  // seperator for tokenizing
-    char *default_yaml = CONFIG_FILE;                 // yaml file to check, parse, and tokenize
+    char buf[BUF_LEN] __attribute__ ((aligned(8)));   /* buffer that stores events */
+    char *p;                                          /* char to check against buf when checking for events */
+    char *prepend, *command, *str;                    /* set yaml tokens into readable strings */
+    char *sep = " ";                                  /* seperator for tokenizing */
+    char *default_yaml = CONFIG_FILE;                 /* name of yaml file to check, parse, and tokenize */
     
-    int verbose = 0;                                  // flag for verbosity. 0 = false
-    int rd;                                           // return value for local file descriptors
-    int c, in, inode_i;                               // various return types when checking
-    int x_flag, e_flag;                               // flags for checking against global arrays
+    int verbose = 0;                                  /* flag for verbosity. 0 = false */
+    int rd;                                           /* return value for local file descriptors */
+    int c, in, inode_i;                               /* various return values for error-checking */
+    int x_flag, e_flag;                               /* flags for checking against global arrays */
 
-    errno = 0;                                        // Set errno flag to 0
+    /* set errno to be 0 */
+    errno = 0;
     
+    /* when exit is called, also initialize cleanup routine */
     atexit(cleanup);
+
+    /* signal handling for SIGINT and SIGTERM */
     signal(SIGINT, catch_sig);
     signal(SIGTERM, catch_sig);
     
+    /* argument parsing */
     while ((c = getopt (argc, argv, "hv")) != -1)
     switch (c){
-      // Display help menu
-      case 'h': usage(argv[0]); exit(EXIT_SUCCESS);
-      // Turns on verbosity
-      case 'v': verbose = 1; break;
-      // Shorts to usage()
-      default: usage(argv[0]); exit(EXIT_FAILURE);
+        /* display help menu */
+        case 'h': 
+            usage(argv[0]); 
+            exit(EXIT_SUCCESS);
+        /* set verbosity flag */
+        case 'v': 
+            verbose = 1; 
+            break;
+        /* default short to usage */
+        default: 
+            usage(argv[0]); 
+            exit(EXIT_FAILURE);
     }
     
-    // Argument check to see if other .yaml file is specified
+    /* check argument list for any yaml file configuration changes */
     for (int i = 1; i < argc; i++){
-      char *dot = strrchr(argv[i], '.');
-      if (dot && !strcmp(dot, ".yaml")){
-        printf("YAML file specified: %s\n", argv[i]);
-        default_yaml = argv[i];
-        break; // break, so only one yaml file is specified
-      }
-    }
-    
-    printf("STARTING WATCHMAN!\n");
-    
-    // First, check the file.
-    yaml = file_check(default_yaml);
-    if ( yaml.flag < 0){
-      
-      // No perror, since we got back a errno string.
-      fprintf(stderr, "Error %i: Unable to open file: %s\n", yaml.flag, yaml.data);
-      
-      // Create an empty config file, then quit
-      printf("Creating configuration file for you...\n");
-      struct file new_file = create_file(CONFIG_FILE, NULL);
-      exit(EXIT_FAILURE);
-    } else {
-      printf("File successfully found and opened!\n");
-    }
-    
-    // Next, check the YAML key-value validity.
-    y = parse_yaml_config(default_yaml);
-          
-    if ( y.return_flag == false){
-      perror("Could not initialize YAML parser. Reason");
-    } else if ( y.return_flag == true ){
-      if (verbose == 1 ){
-        printf("Successfully parsed YAML file.\n"
-               "\tinode: %s\n\tevent: %s\n\texecute: %s\n",
-              y.inode, y.event, y.execute);
-      }
-    }
-    
+        /* checking for string with dot to represent file type */
+        char *dot = strrchr(argv[i], '.');
+        if (dot && !strcmp(dot, ".yaml")){
             
-    // Iterate through events[] array to check if inode specified
-    // is specified. e_flag is set to see if comparisions are valid. If all
-    // are not, last instance of e_flag remains 1, printing to stderr.
-    for ( int i = 0; events[i] != NULL; i++){
-        if (strcmp(y.event, events[i]) == 0){
-          e_flag = 0; break; // Break. Event has been matched
-        } else {
-          e_flag = 1; continue; // Set e_flag and continue until end of iterator
+            if (verbose)
+                printf("YAML file specified: %s\n", argv[i]);
+            
+            /* set default file as argument with YAML extensin */
+            default_yaml = argv[i];
+            break;
         }
     }
-    // If e_flag retains 1, then the event isn't found
-    if( e_flag == 1 ) {
-      fprintf(stderr, "\nUnknown inode event supplied: %s\n", y.event);
-      exit(EXIT_FAILURE);
-    }
-    else if ( e_flag == 0 ) {
-      if (verbose == 1){
-        printf("\ninode event found! Continuing.\n");
-      }
+    
+    if (verbose)
+        printf("STARTING WATCHMAN!\n");
+    
+    /* perform file-checking */
+    yaml = file_check(default_yaml);
+    if ( yaml.flag < 0){
+        
+        /* no perror, since we got back a errno string. */
+        fprintf(stderr, "Error %i: Unable to open file: %s\n", yaml.flag, yaml.data);
+      
+        /* create new file and then quit */
+        if (verbose)
+            printf("Creating configuration file for you...\n");
+        
+        file_t new_file = create_file(CONFIG_FILE, NULL);
+        exit(EXIT_FAILURE);
+    } 
+    else {
+        /* success! */
+        if (verbose)
+            printf("File successfully found and opened!\n");
     }
     
-    // Iterate through execute_action to check if execute action matches.
-    // However, we need to first slice the value.
-    mem = str = strdup(y.execute); // allocate memory, also create a copy
+    /* check for key-value validity within yaml file */
+    y = parse_yaml_config(default_yaml);
     
-    // prepend represents the first part of the command string.
-    // We will compare this with the execute_action array.
+    if (y.return_flag == false)
+        perror("Could not initialize YAML parser. Reason");
+    else if ( y.return_flag == true ){
+        if (verbose)
+            printf("Successfully parsed YAML file.\n"
+                "\tinode: %s\n\tevent: %s\n\texecute: %s\n",
+                y.inode, y.event, y.execute);
+    }
+    
+            
+    /* 
+     * Iterate through events[] array to check if inode specified
+     * is specified. e_flag is set to see if comparisions are valid. If all
+     * are not, last instance of e_flag remains 1, printing to stderr. 
+     */
+    for (int i = 0; events[i] != NULL; i++){
+        if (strcmp(y.event, events[i]) == 0){ 
+            e_flag = 0; 
+            break; /* break. event has been matched */
+        } else {
+            e_flag = 1;
+            continue; /* set e_flag and continue until end */
+        }
+    }
+    
+    /* if e_flag retains 1, then the event wasn't found */
+    if (e_flag == 1){
+        fprintf(stderr, "\nUnknown inode event supplied: %s\n", y.event);
+        exit(EXIT_FAILURE);
+    }
+    else if (e_flag == 0){
+        if (verbose){
+            printf("\ninode event found! Continuing.\n");
+        }
+    }
+    
+   /*
+    * Iterate through execute_action to check if execute action matches.
+    * However, we need to first slice the value.
+    */    
+    mem = str = strdup(y.execute); /* allocate memory and create a copy */
+    
+   /* 
+    * prepend represents the first part of the command string.
+    * We will compare this with the execute_action array.
+    */
     prepend = strtok(str, sep);
     
-    // This will represent the actual command the user wants to execute
+    /* represents command user wants to call */
     command = strtok(NULL, "\"");
-      
+    
+    /* check if the command is valid, and set the appropriate flag */
     for ( int i = 0; execute_action[i] != NULL; i++){
       if (strcmp(prepend, execute_action[i]) == 0){
-        x_flag = 0; break;
+        x_flag = 0; 
+        break;
       } else {
-        x_flag = 1; continue;
+        x_flag = 1; 
+        continue;
       }
     }
     
-    if( x_flag == 1 ) {
-      fprintf(stderr, "Unknown command supplied: %s\n", y.execute);
-      exit(EXIT_FAILURE);
+    /* error-checking */
+    if (x_flag) {
+        fprintf(stderr, "Unknown command supplied: %s\n", y.execute);
+        exit(EXIT_FAILURE);
     }
     else if (x_flag == 0) {
-      if (verbose == 1){
-        printf("Command found! Continuing.\n");
-      }
+        if (verbose){
+            printf("Command found! Continuing.\n");
+        }
     }
     
-    // Use a standard file_check to check for existence of inode.
-    // We will only be using this to treat the inode as a standard file/directory.
-    // Much larger operations will be executed during actual watcher creation.
+   /* 
+    * use a standard file_check to check for existence of inode.
+    * We will only be using this to treat the inode as a standard file/directory.
+    * Much larger operations will be executed during actual watcher creation.
+    */
     inode_check = file_check(y.inode);
-    if ( inode_check.flag < 0){
-      // No perror, since we got back a errno string.
-      fprintf(stderr, "Error %i: Unable to open inode \"%s\": %s\n", inode_check.flag, y.inode, inode_check.data);
-      exit(EXIT_FAILURE);
-    } else {
-      if ( verbose == 1 ){
-        printf("inode successfully found and opened!\n");
-      }
-      // Check for permission
-      inode_i = check_inode_permissions(y.inode);
-      if (inode_i < 0) { perror("Permission check for inode failed! Reason"); }
+    if (inode_check.flag < 0){
+        fprintf(stderr, "Error %i: Unable to open inode \"%s\": %s\n", inode_check.flag, y.inode, inode_check.data);
+        exit(EXIT_FAILURE);
+    } 
+    else {
+        
+        /* now check if we have permissions to access */
+        if (verbose)
+            printf("inode successfully found and opened!\n");
+        
+        inode_i = check_inode_permissions(y.inode);
+        
+        if (inode_i < 0)
+            perror("Permission check for inode failed! Reason");
     }
     
-    // Let's finally create an inode_watcher!
 
-    // Initialize inotify
+    /* initialize inotify */
     fd = inotify_init();
-    if ( fd < 0) {
-      perror("Could not initialize inotify. Reason");
-    }
+    if ( fd < 0)
+        perror("Could not initialize inotify. Reason");
     
-    // Construct unsigned mask from event string for inotify_add_watch
+    /* construct unsigned mask from event string for inotify_add_watch */
     mask = parse_event(y.event);
         
-    // ADD A FILE WATCHHHHHAH!
+    /* add a file watcher */
     wd = inotify_add_watch(fd, y.inode, mask);
-    if ( wd < 0) { 
-      perror("Could not add watch. Reason");
+    if (wd < 0){ 
+        perror("Could not add watch. Reason");
     }
     
-    // Starting looping and watching for events!
-    // BREAK on interrupt!! Important so that program can finish execution
-    // by freeing memory and removing watcher
+   /* starting looping and watching for events!
+    * NOTE: BREAK on interrupt!! Important so that program can finish execution
+    * by freeing memory and removing watcher
+    */
     while (sc) {      
-      rd = read(fd, buf, BUF_LEN);
+        rd = read(fd, buf, BUF_LEN);
     
-      if (rd == 0) fprintf(stdout, "read() tossed back a 0");
-      
-      if (rd == 1 ) {
-        perror("Couldn't read event. Reason");
-        break;
-      }
+        if (rd == 0) 
+            fprintf(stdout, "read() tossed back a 0");
+        else if (rd == 1){
+            perror("Couldn't read event. Reason");
+            break;
+        }
 
-      for (p = buf; p < buf + rd; ) {
-          // Made local so that data gets re-initialized within scope
-          struct tm * timeinfo;                             
-          time_t rawtime;           
-          char *ltime, *eventstr;
-          const char *event;                            
+        for (p = buf; p < buf + rd;){
+
+            /* made local so that data gets re-initialized within scope */
+            struct tm * timeinfo;                             
+            time_t rawtime;           
+            char *ltime, *eventstr;
+            const char *event;                            
           
-          // Get time, create new str;                       
-          timeinfo = gettime(rawtime);
-          ltime = asctime(timeinfo);
+            /* get time, and create new string */
+            timeinfo = gettime(rawtime);
+            ltime = asctime(timeinfo);
           
-          ev = (struct inotify_event *) p;
-          
-          // Complete only when verbose flag is on!
-          if ( verbose == 1 ){
-            // Print the event in terminal
-            event = display_event(ev);
-            
-            // Raise a notification
-            // message: timeinfo (as string)
-            // body: event that occurred
-            raise_notification(ltime, event);
-          }
-          
-          // Create dynamically allocated event string
-          // Source: https://stackoverflow.com/questions/5901181/c-string-append
-          if((eventstr = malloc(strlen(ltime) + strlen(event) + 2)) != NULL){
-            eventstr[0] = '\0';   // ensures the memory is an empty string
-            strcat(eventstr, ltime);
-            strcat(eventstr, event);
-            strcat(eventstr, "\n");                      
-          } else {
-            perror("malloc failed. Reason");
-            exit(EXIT_FAILURE);
-          }
-          
-          if(strcmp(prepend, "execute") == 0){
-            // TIL: system() isn't that safe.
-            // Source: http://www.csl.mtu.edu/cs4411.ck/www/NOTES/process/fork/exec.html
-            
-            char *argv_p[64]; // store command as pointer to char array
-            parse_execute(command, argv_p);
-            int e_result = execute_command(argv_p);
-            if (e_result < 0) {
-              perror("Could not execute command. Reason");
-              exit(EXIT_FAILURE);
+            /* copy over inotify_event */
+            ev = (struct inotify_event *) p;
+              
+            if (verbose){
+                  
+                /* display event through terminal*/
+                event = display_event(ev);
+                
+                /* raise notification */ 
+                raise_notification(ltime, event);
             }
-            
-          } else if (strcmp(prepend, "log") == 0 ){
-            // If path is none, use default.
-            if (command == NULL) {
-              command = DEFAULT_FILENAME;
+              
+            /* source: https://stackoverflow.com/questions/5901181/c-string-append */
+            if ((eventstr = malloc(strlen(ltime) + strlen(event) + 2)) != NULL){
+                eventstr[0] = '\0';
+                strcat(eventstr, ltime);
+                strcat(eventstr, event);
+                strcat(eventstr, "\n");                      
+            } 
+            else {
+                perror("malloc failed. Reason");
+                exit(EXIT_FAILURE);
             }
+         
             
-            // Create a log file, with contents of eventstr
-            struct file tmpLog = create_file(command, eventstr);
-            if (tmpLog.flag < 0 ){
-              fprintf(stderr, "Couldn't create log file. Reason: %s\n", tmpLog.data);
-              exit(EXIT_FAILURE);
-            }
-          } 
-          
-          p += sizeof(struct inotify_event) + ev->len;
-          
-          free(eventstr);
-      }
+            /* check command and execute accordingly */   
+            if (strcmp(prepend, "execute") == 0){
+                
+                /* parse command for fork / execv */
+                char *argv_p[64];
+                parse_execute(command, argv_p);
+                
+                /* execute the command */
+                int e_result = execute_command(argv_p);
+                
+                if (e_result < 0) {
+                    perror("Could not execute command. Reason");
+                    exit(EXIT_FAILURE);
+                }
+                
+            } 
+            else if (strcmp(prepend, "log") == 0 ){
+                /* if path is none, use default. */
+                if (command == NULL) {
+                    command = DEFAULT_FILENAME;
+                }
+                
+                /* create a log file, with contents of eventstr */
+                file_t tmpLog = create_file(command, eventstr);
+                if (tmpLog.flag < 0 ){
+                    fprintf(stderr, "Couldn't create log file. Reason: %s\n", tmpLog.data);
+                    exit(EXIT_FAILURE);
+                }
+           } 
+              
+           p += sizeof(struct inotify_event) + ev->len;   
+           free(eventstr);
+        }
     }
     
+    /* success */
     exit(EXIT_SUCCESS);
 }
