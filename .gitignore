@@ -1,3 +1,6 @@
 *.o
+*.swp
 *.h.gch
+
+my_inode
 watchman

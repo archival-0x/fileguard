@@ -65,8 +65,6 @@ main(int argc, char **argv)
     yaml_t y;                                         /* returns a tokenized yaml */
     struct inotify_event *ev;                         /* represents a inotify_event struct */
     
-    uint32_t mask;                                    /* used for bitmasking such that event becomes uint32_t */
-    
     char buf[BUF_LEN] __attribute__ ((aligned(8)));   /* buffer that stores events */
     char *mem;                                        /* memory used for strdup allocation */
     char *p;                                          /* char to check against buf when checking for events */
@@ -244,25 +242,24 @@ main(int argc, char **argv)
 
     /* initialize inotify */
     fd = inotify_init();
-    if ( fd < 0)
+    if (fd < 0)
         perror("Could not initialize inotify. Reason");
-    
-    /* construct unsigned mask from event string for inotify_add_watch */
-    mask = parse_event(y.event);
         
     /* add a file watcher */
-    wd = inotify_add_watch(fd, y.inode, mask);
+    wd = inotify_add_watch(fd, y.inode, IN_ALL_EVENTS);
     if (wd < 0){ 
         perror("Could not add watch. Reason");
     }
+
     
    /* starting looping and watching for events!
     * NOTE: BREAK on interrupt!! Important so that program can finish execution
     * by freeing memory and removing watcher
     */
     while (sc) {      
+
+        /* read from inotify fd */
         rd = read(fd, buf, BUF_LEN);
-    
         if (rd == 0) 
             fprintf(stdout, "read() tossed back a 0");
         else if (rd == 1){
@@ -270,6 +267,7 @@ main(int argc, char **argv)
             break;
         }
 
+        /* process events and do what's necessary according to YAML */
         for (p = buf; p < buf + rd;){
 
             /* made local so that data gets re-initialized within scope */
@@ -285,38 +283,20 @@ main(int argc, char **argv)
             /* copy over inotify_event */
             ev = (struct inotify_event *) p;
               
-            if (verbose){
-                  
-                /* display event through terminal*/
-                event = display_event(ev);
-                
-                /* raise notification */ 
-                raise_notification(ltime, event);
-            }
-              
-            /* source: https://stackoverflow.com/questions/5901181/c-string-append */
-            if ((eventstr = malloc(strlen(ltime) + strlen(event) + 2)) != NULL){
-                eventstr[0] = '\0';
-                strcat(eventstr, ltime);
-                strcat(eventstr, event);
-                strcat(eventstr, "\n");                      
-            } 
-            else {
-                perror("malloc failed. Reason");
-                exit(EXIT_FAILURE);
-            }
-         
-            
-            /* check command and execute accordingly */   
-            if (strcmp(prepend, "execute") == 0){
+            /* display event through terminal*/
+            event = display_event(ev);
+            /* raise notification */
+            raise_notification(ltime, event);
+ 
+            /* check command, if the specified event matches the current event and execute accordingly */
+            if ((strcmp(prepend, "execute") == 0) && (strcmp(y.event, event) == 0)){
                 
                 /* parse command for fork / execv */
                 char *argv_p[64];
                 parse_execute(command, argv_p);
-                
+
                 /* execute the command */
                 int e_result = execute_command(argv_p);
-                
                 if (e_result < 0) {
                     perror("Could not execute command. Reason");
                     exit(EXIT_FAILURE);
@@ -325,6 +305,18 @@ main(int argc, char **argv)
             } 
             else if (strcmp(prepend, "log") == 0 ){
 
+                /* source: https://stackoverflow.com/questions/5901181/c-string-append */
+                if ((eventstr = malloc(strlen(ltime) + strlen(event) + 2)) != NULL){
+                    eventstr[0] = '\0';
+                    strcat(eventstr, ltime);
+                    strcat(eventstr, event);
+                    strcat(eventstr, "\n");
+                }
+                else {
+                    perror("malloc failed. Reason");
+                    exit(EXIT_FAILURE);
+                }
+  
                 /* if path is none, use default. */
                 if (command == NULL) {
                     command = DEFAULT_FILENAME;
@@ -335,11 +327,10 @@ main(int argc, char **argv)
                 if (tmpLog.flag < 0 ){
                     perror("Couldn't create log file. Reason");
                     exit(EXIT_FAILURE);
-                }
-           } 
-              
-           p += sizeof(struct inotify_event) + ev->len;   
-           free(eventstr);
+                } 
+                free(eventstr);
+            }
+            p += sizeof(struct inotify_event) + ev->len;
         }
     }
     
