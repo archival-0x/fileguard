@@ -35,23 +35,4 @@ execute_action[] =
 };
 
 
-/* 
- * global signal counter variable, with sig_atomic_t typedef 
- * for initialization and signal handling
- */
-volatile sig_atomic_t sc = true;
-
-/*
- * global file descriptor and watch descriptor for initialization and
- * cleanup
- */
-int fd, wd;
-
-/* 
- * global chunk of unallocated memory for both initialization and
- * cleanup
- */
-char * mem;
-
-
 #endif

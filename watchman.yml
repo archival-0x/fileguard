@@ -12,4 +12,4 @@ event: IN_ALL_EVENTS
 #      * restart <PROCESS> - restarts a process through a POSIX-style process scheduler
 #      * execute "<COMMAND>" - execute a user-specified command
 #      * log <CURR_DIR | ROOT>  - create a log of events occuring for a watched inode
-execute: execute "echo 'Hello world!'"
+execute: execute "echo 'hello world'"

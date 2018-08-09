@@ -1,5 +1,25 @@
 #include "main.h"
 
+
+/* 
+ * global signal counter variable, with sig_atomic_t typedef 
+ * for initialization and signal handling
+ */
+volatile sig_atomic_t sc = true;
+
+/*
+ * global file descriptor and watch descriptor for initialization and
+ * cleanup
+ */
+int fd, wd;
+
+/* 
+ * global chunk of unallocated memory for both initialization and
+ * cleanup
+ */
+char * mem;
+
+
 /*
  * displays help and usage
  */
@@ -12,6 +32,16 @@ usage(char * application_name)
             "-v : Turns ON verbosity\n"
             , application_name);
 }
+/*
+ * cleanup routine run by atexit() in order to
+ * safely clean up memory and close fds
+ */
+static void 
+cleanup(void)
+{
+    /* remove watch on file descriptor */
+    inotify_rm_watch(fd, wd);
+}
 
 /*
  * function routine that continously listens and catches
@@ -20,25 +50,12 @@ usage(char * application_name)
 static void 
 catch_sig(int s)
 {
-   if (s == SIGINT || s == SIGTERM){
-     printf("SIGINT caught! Cleaning up...\n", s);
-     sc = false; 
-     exit(EXIT_SUCCESS);
-   }
+    printf("Signal %i caught! Cleaning up...\n", s);
+    sc = false; 
+    cleanup();
+    exit(EXIT_SUCCESS);
 }
 
-/*
- * cleanup routine run by atexit() in order to
- * safely clean up memory and close fds
- */
-static void 
-cleanup(void)
-{
-  /* remove watch on file descriptor */
-  inotify_rm_watch(fd, wd);
-  /* free heap-allocated block of memory */
-  free(mem);   
-}
 
 
 int 
@@ -51,6 +68,7 @@ main(int argc, char **argv)
     uint32_t mask;                                    /* used for bitmasking such that event becomes uint32_t */
     
     char buf[BUF_LEN] __attribute__ ((aligned(8)));   /* buffer that stores events */
+    char *mem;                                        /* memory used for strdup allocation */
     char *p;                                          /* char to check against buf when checking for events */
     char *prepend, *command, *str;                    /* set yaml tokens into readable strings */
     char *sep = " ";                                  /* seperator for tokenizing */
@@ -69,7 +87,6 @@ main(int argc, char **argv)
 
     /* signal handling for SIGINT and SIGTERM */
     signal(SIGINT, catch_sig);
-    signal(SIGTERM, catch_sig);
     
     /* argument parsing */
     while ((c = getopt (argc, argv, "hv")) != -1)
@@ -307,6 +324,7 @@ main(int argc, char **argv)
                 
             } 
             else if (strcmp(prepend, "log") == 0 ){
+
                 /* if path is none, use default. */
                 if (command == NULL) {
                     command = DEFAULT_FILENAME;
@@ -315,7 +333,7 @@ main(int argc, char **argv)
                 /* create a log file, with contents of eventstr */
                 file_t tmpLog = create_file(command, eventstr);
                 if (tmpLog.flag < 0 ){
-                    fprintf(stderr, "Couldn't create log file. Reason: %s\n", tmpLog.data);
+                    perror("Couldn't create log file. Reason");
                     exit(EXIT_FAILURE);
                 }
            } 
