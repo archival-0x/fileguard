@@ -185,34 +185,3 @@ parse_yaml_config(char * filename)
         config.return_flag = true;
         return config;
 }
-
-void 
-parse_execute(char * line, char ** argv)
-{
-    while (*line != '\0') {       
-        while (*line == ' ' || *line == '\t' || *line == '\n')
-            *line++ = '\0';    
-        *argv++ = line;          
-        while (*line != '\0' && *line != ' ' && 
-            *line != '\t' && *line != '\n') 
-            line++;             
-    }
-    *argv = '\0';             
-}
-
-int 
-execute_command(char **argv)
-{
-    pid_t  pid;     /* child process id */
-    int    status;  /* status */
-
-    if ((pid = fork()) < 0) {    
-        return -1;
-    } else if (pid == 0) {         
-        if (execvp(*argv, argv) < 0)
-            return -1;
-    } else
-        while (wait(&status) != pid);
-    
-    return 0;
-}

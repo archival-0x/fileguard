@@ -27,7 +27,7 @@ static void
 usage(char * application_name)
 {
     /* print help to STDOUT */
-    fprintf(stdout, "Usage: (note that these are optional arguments)\n\t %s -[h|v] <other.yaml>\n\n"
+    fprintf(stdout, "Usage: (note that these are optional arguments)\n\t %s -[h|v|n] <other.yaml>\n\n"
             "-h : Display this help message\n"
             "-v : Turns ON verbosity\n"
             "-n : Turns ON libnotify notifications\n"
@@ -89,7 +89,7 @@ main(int argc, char **argv)
     signal(SIGINT, catch_sig);
     
     /* argument parsing */
-    while ((c = getopt (argc, argv, "hv")) != -1)
+    while ((c = getopt (argc, argv, "hvn")) != -1)
     switch (c){
         /* display help menu */
         case 'h': 
@@ -299,18 +299,10 @@ main(int argc, char **argv)
             /* check command, if the specified event matches the current event and execute accordingly */
             if ((strcmp(prepend, "execute") == 0) && (strcmp(y.event, event) == 0)){
                 
-                /* parse command for fork / execv */
-                char *argv_p[64];
-                parse_execute(command, argv_p);
-
                 /* execute the command */
-                int e_result = execute_command(argv_p);
-                if (e_result < 0) {
-                    perror("Could not execute command. Reason");
-                    exit(EXIT_FAILURE);
-                }
-                
-            } 
+                if (system((const char *) command) != 0)
+                    exit(EXIT_FAILURE);                
+            }
             else if (strcmp(prepend, "log") == 0 ){
 
                 /* source: https://stackoverflow.com/questions/5901181/c-string-append */
