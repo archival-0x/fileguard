@@ -30,7 +30,8 @@ usage(char * application_name)
     fprintf(stdout, "Usage: (note that these are optional arguments)\n\t %s -[h|v] <other.yaml>\n\n"
             "-h : Display this help message\n"
             "-v : Turns ON verbosity\n"
-            , application_name);
+            "-n : Turns ON libnotify notifications\n"
+            ,application_name);
 }
 /*
  * cleanup routine run by atexit() in order to
@@ -73,6 +74,7 @@ main(int argc, char **argv)
     char *default_yaml = CONFIG_FILE;                 /* name of yaml file to check, parse, and tokenize */
     
     int verbose = 0;                                  /* flag for verbosity. 0 = false */
+    int notifier = 0;                                 /* flag for libnotify. 0 = false */
     int rd;                                           /* return value for local file descriptors */
     int c, in, inode_i;                               /* various return values for error-checking */
     int x_flag, e_flag;                               /* flags for checking against global arrays */
@@ -96,6 +98,10 @@ main(int argc, char **argv)
         /* set verbosity flag */
         case 'v': 
             verbose = 1; 
+            break;
+        /* set notifier flag */
+        case 'n':
+            notifier = 1;
             break;
         /* default short to usage */
         default: 
@@ -285,8 +291,10 @@ main(int argc, char **argv)
               
             /* display event through terminal*/
             event = display_event(ev);
-            /* raise notification */
-            raise_notification(ltime, event);
+
+            /* raise notification if flag was set */
+            if (notifier)
+                raise_notification(ltime, event);
  
             /* check command, if the specified event matches the current event and execute accordingly */
             if ((strcmp(prepend, "execute") == 0) && (strcmp(y.event, event) == 0)){
