@@ -47,12 +47,9 @@ This is the default `CONFIG_FILE` for __watchman__. When the program is executed
 
     # -- Include action to complete when inode changes -- #
     #    List of actions:                                 
-    #      * "kill <PROCESS>" - kills a process through a POSIX-style process scheduler
-    #      * "start <PROCESS>" - starts a process through a POSIX-style process scheduler
-    #      * "restart <PROCESS>" - restarts a process through a POSIX-style process scheduler
     #      * "execute <COMMAND>" - execute a user-specified command
     #      * "log <CURR_DIR | ROOT>"  - create a log of events occuring for a watched inode
-    execute: execute "echo 'Hello world!'"
+    action: execute "echo 'Hello world!'"
 
 
 This example config file prints "Hello world!" to the terminal when a `IN_ACCESS` event is detected on the inode `/root/my_inode`.
@@ -74,13 +71,8 @@ This example config file prints "Hello world!" to the terminal when a `IN_ACCESS
        "IN_MOVED_TO",           // Directory with new filename when a file is renamed.
        "IN_OPEN",               // File/directory is opened
        "IN_UNMOUNT",            // Filesystem unmounted
-       "IN_ALL_EVENTS",         // In all events (except IN_UNMOUNT)
     };
 
 ## TODO:
 
-* [ ] Write `kill`, `start`, `restart` code for process scheduling
-* [x] Optionally specify custom `.yaml` file as command line argument
-* [ ] Specify YAML option for triggering `libnotify` notification
-* [x] Replace `system()` with `fork()` and `execvp()`
 * [ ] Watch multiple inodes
