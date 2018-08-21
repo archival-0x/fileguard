@@ -36,6 +36,7 @@ yaml_t
   char * inode;     /* inode name */
   char * event;     /* event to watch for */
   char * execute;   /* command of execution */
+  char * log;       /* log to files */
   bool return_flag; /* what's being returned */
 };
 
