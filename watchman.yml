@@ -9,4 +9,4 @@ event: IN_CREATE
 #    List of actions:                                 
 #      * execute "<COMMAND>" - execute a user-specified command
 #      * log <CURR_DIR | ROOT>  - create a log of events occuring for a watched inode
-execute: execute "echo 'hello world'"
+action: execute "echo 'hello world'"

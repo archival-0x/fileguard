@@ -1,28 +1,32 @@
-#include "main.h"
+#include "watchman.h"
+
+/* used for signal handling */
+static volatile sig_atomic_t sc = true;
+
+/* global file and watch descriptors to be cleaned up */
+static int fd, wd;
+
+/* represents an array filled with events for watching */
+static const char *
+events[] =
+{
+   "IN_ACCESS",             // File accessed
+   "IN_ATTRIB",             // Metadata changes
+   "IN_CLOSE_WRITE",        // File opened for writing was closed.
+   "IN_CLOSE_NOWRITE",      // File or directory not opened for writing was closed.
+   "IN_CREATE",             // File/directory created
+   "IN_DELETE",             // File/directory deleted
+   "IN_DELETE_SELF",        // Watched inode deleted
+   "IN_MODIFY",             // File modified
+   "IN_MOVE_SELF",          // Watched inode moved
+   "IN_MOVED_FROM",         // Directory with old filename when a file is renamed.
+   "IN_MOVED_TO",           // Directory with new filename when a file is renamed.
+   "IN_OPEN",               // File/directory is opened
+   "IN_UNMOUNT",            // Filesystem unmounted
+};
 
 
-/* 
- * global signal counter variable, with sig_atomic_t typedef 
- * for initialization and signal handling
- */
-volatile sig_atomic_t sc = true;
-
-/*
- * global file descriptor and watch descriptor for initialization and
- * cleanup
- */
-int fd, wd;
-
-/* 
- * global chunk of unallocated memory for both initialization and
- * cleanup
- */
-char * mem;
-
-
-/*
- * displays help and usage
- */
+/* displays help menu */
 static void 
 usage(char * application_name)
 {
@@ -33,21 +37,15 @@ usage(char * application_name)
             "-n : Turns ON libnotify notifications\n"
             ,application_name);
 }
-/*
- * cleanup routine run by atexit() in order to
- * safely clean up memory and close fds
- */
+
+/* cleanup routine called by atexit */
 static void 
 cleanup(void)
 {
-    /* remove watch on file descriptor */
     inotify_rm_watch(fd, wd);
 }
 
-/*
- * function routine that continously listens and catches
- * for user-supplied SIGINTs or SIGTERMs and exits
- */
+/* signal trapping routine that calls cleanup routine */
 static void 
 catch_sig(int s)
 {
@@ -62,22 +60,18 @@ catch_sig(int s)
 int 
 main(int argc, char **argv)
 {   
-    file_t yaml, inode_check;                         /* target file struct for yaml config */
-    yaml_t y;                                         /* returns a tokenized yaml */
+    /* represents a inotify_event struct */
     struct inotify_event *ev;                         /* represents a inotify_event struct */
-    
-    char buf[BUF_LEN] __attribute__ ((aligned(8)));   /* buffer that stores events */
-    char *mem;                                        /* memory used for strdup allocation */
-    char *p;                                          /* char to check against buf when checking for events */
-    char *prepend, *command, *str;                    /* set yaml tokens into readable strings */
-    char *sep = " ";                                  /* seperator for tokenizing */
-    char *default_yaml = CONFIG_FILE;                 /* name of yaml file to check, parse, and tokenize */
-    
-    int verbose = 0;                                  /* flag for verbosity. 0 = false */
-    int notifier = 0;                                 /* flag for libnotify. 0 = false */
-    int rd;                                           /* return value for local file descriptors */
-    int c, in, inode_i;                               /* various return values for error-checking */
-    int x_flag, e_flag;                               /* flags for checking against global arrays */
+
+    /* default yaml file to check, parse and tokenize */
+    char *yaml_target;
+
+    /* return value for fds during event loop */
+    int rd;
+
+    /* initialize argparsing flags */ 
+    int verbose;
+    int notifier;  
 
     /* set errno to be 0 */
     errno = 0;
@@ -87,8 +81,10 @@ main(int argc, char **argv)
 
     /* signal handling for SIGINT and SIGTERM */
     signal(SIGINT, catch_sig);
-    
+
+   
     /* argument parsing */
+    int c;
     while ((c = getopt (argc, argv, "hvn")) != -1)
     switch (c){
         /* display help menu */
@@ -111,140 +107,84 @@ main(int argc, char **argv)
     
     /* check argument list for any yaml file configuration changes */
     for (int i = 1; i < argc; i++){
-        /* checking for string with dot to represent file type */
         char *dot = strrchr(argv[i], '.');
         if (dot && !strcmp(dot, ".yaml")){
-            
             if (verbose)
                 printf("YAML file specified: %s\n", argv[i]);
-            
-            /* set default file as argument with YAML extensin */
-            default_yaml = argv[i];
+            yaml_target = argv[i];
             break;
-        }
+        } else
+            yaml_target = CONFIG_FILE;
+            break;
     }
     
     if (verbose)
         printf("STARTING WATCHMAN!\n");
     
     /* perform file-checking */
-    yaml = file_check(default_yaml);
-    if ( yaml.flag < 0){
-        
-        /* no perror, since we got back a errno string. */
+    file_t yaml;
+    yaml = file_check(yaml_target);
+    if (yaml.flag < 0){        
         fprintf(stderr, "Error %i: Unable to open file: %s\n", yaml.flag, yaml.data);
-      
+        
         /* create new file and then quit */
         if (verbose)
             printf("Creating configuration file for you...\n");
-        
         file_t new_file = create_file(CONFIG_FILE, NULL);
         exit(EXIT_FAILURE);
     } 
-    else {
-        /* success! */
-        if (verbose)
-            printf("File successfully found and opened!\n");
-    }
     
-    /* check for key-value validity within yaml file */
-    y = parse_yaml_config(default_yaml);
-    
-    if (y.return_flag == false)
+    if (verbose)
+        printf("File successfully found and opened!\n");
+ 
+
+    /* parse our yaml configuration file */
+    yaml_t y;
+    y = parse_yaml_config(yaml_target); 
+    if (y.return_flag == false){
         perror("Could not initialize YAML parser. Reason");
-    else if ( y.return_flag == true ){
-        if (verbose)
-            printf("Successfully parsed YAML file.\n"
-                "\tinode: %s\n\tevent: %s\n\texecute: %s\n",
-                y.inode, y.event, y.execute);
+        exit(EXIT_FAILURE);
     }
+
+    if (verbose)
+        printf("Successfully parsed YAML file.\n"
+            "\tinode: %s\n\tevent: %s\n\texecute: %s\n",
+            y.inode, y.event, y.action);
     
-            
-    /* 
-     * Iterate through events[] array to check if inode specified
-     * is specified. e_flag is set to see if comparisions are valid. If all
-     * are not, last instance of e_flag remains 1, printing to stderr. 
-     */
+
+    /* check if user-specified event is supported */
+    int event_flag;
     for (int i = 0; events[i] != NULL; i++){
-        if (strcmp(y.event, events[i]) == 0){ 
-            e_flag = 0; 
-            break; /* break. event has been matched */
-        } else {
-            e_flag = 1;
-            continue; /* set e_flag and continue until end */
-        }
+        if (strcmp(y.event, events[i]) == 0){ event_flag = 0; break; }
+        else { event_flag = 1; continue; }
     }
     
-    /* if e_flag retains 1, then the event wasn't found */
-    if (e_flag == 1){
+    if (event_flag == 1){
         fprintf(stderr, "\nUnknown inode event supplied: %s\n", y.event);
         exit(EXIT_FAILURE);
     }
-    else if (e_flag == 0){
-        if (verbose){
-            printf("\ninode event found! Continuing.\n");
-        }
-    }
-    
-   /*
-    * Iterate through execute_action to check if execute action matches.
-    * However, we need to first slice the value.
-    */    
-    mem = str = strdup(y.execute); /* allocate memory and create a copy */
-    
-   /* 
-    * prepend represents the first part of the command string.
-    * We will compare this with the execute_action array.
-    */
-    prepend = strtok(str, sep);
-    
-    /* represents command user wants to call */
-    command = strtok(NULL, "\"");
-    
-    /* check if the command is valid, and set the appropriate flag */
-    for ( int i = 0; execute_action[i] != NULL; i++){
-      if (strcmp(prepend, execute_action[i]) == 0){
-        x_flag = 0; 
-        break;
-      } else {
-        x_flag = 1; 
-        continue;
-      }
-    }
-    
-    /* error-checking */
-    if (x_flag) {
-        fprintf(stderr, "Unknown command supplied: %s\n", y.execute);
-        exit(EXIT_FAILURE);
-    }
-    else if (x_flag == 0) {
-        if (verbose){
-            printf("Command found! Continuing.\n");
-        }
-    }
-    
-   /* 
-    * use a standard file_check to check for existence of inode.
-    * We will only be using this to treat the inode as a standard file/directory.
-    * Much larger operations will be executed during actual watcher creation.
-    */
+
+    if (verbose)
+        printf("\ninode event found! Continuing.\n");
+
+    /* check if specified inode is an inode */ 
+    file_t inode_check;
     inode_check = file_check(y.inode);
     if (inode_check.flag < 0){
         fprintf(stderr, "Error %i: Unable to open inode \"%s\": %s\n", inode_check.flag, y.inode, inode_check.data);
         exit(EXIT_FAILURE);
-    } 
-    else {
-        
-        /* now check if we have permissions to access */
-        if (verbose)
-            printf("inode successfully found and opened!\n");
-        
-        inode_i = check_inode_permissions(y.inode);
-        
-        if (inode_i < 0)
-            perror("Permission check for inode failed! Reason");
     }
-    
+   
+    if (verbose)
+        printf("inode successfully found and opened!\n");
+  
+    /* check for proper permissions */
+    int iperm;
+    iperm = check_inode_permissions(y.inode);
+    if (iperm < 0){
+        perror("Permission check for inode failed! Reason");
+        exit(EXIT_FAILURE);
+    }
 
     /* initialize inotify */
     fd = inotify_init();
@@ -258,12 +198,23 @@ main(int argc, char **argv)
     }
 
     
-   /* starting looping and watching for events!
-    * NOTE: BREAK on interrupt!! Important so that program can finish execution
-    * by freeing memory and removing watcher
-    */
-    while (sc) {      
+    /* concatenate action string */
+    char *mem, *str, *prepend, *command;
+    mem = str = strdup(y.action);
+    prepend = strtok(str, " ");
+    command = strtok(NULL, "\"");
 
+    if (command == NULL){
+        fprintf(stderr, "Command/path cannot be none. Exiting.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    /* event buffers */
+    char buf[BUF_LEN] __attribute__ ((aligned(8)));
+    char *p;
+ 
+    /* main event loop */
+    while (sc){      
         /* read from inotify fd */
         rd = read(fd, buf, BUF_LEN);
         if (rd == 0) 
@@ -298,38 +249,28 @@ main(int argc, char **argv)
  
             /* check command, if the specified event matches the current event and execute accordingly */
             if ((strcmp(prepend, "execute") == 0) && (strcmp(y.event, event) == 0)){
-                
-                /* execute the command */
-                if (system((const char *) command) != 0)
-                    exit(EXIT_FAILURE);                
-            }
+                system((const char *) command);
+            } 
             else if (strcmp(prepend, "log") == 0 ){
-
-                /* source: https://stackoverflow.com/questions/5901181/c-string-append */
+ 
                 if ((eventstr = malloc(strlen(ltime) + strlen(event) + 2)) != NULL){
                     eventstr[0] = '\0';
                     strcat(eventstr, ltime);
                     strcat(eventstr, event);
                     strcat(eventstr, "\n");
-                }
-                else {
+                } else {
                     perror("malloc failed. Reason");
                     exit(EXIT_FAILURE);
                 }
-  
-                /* if path is none, use default. */
-                if (command == NULL) {
-                    command = DEFAULT_FILENAME;
-                }
-                
+                 
                 /* create a log file, with contents of eventstr */
                 file_t tmpLog = create_file(command, eventstr);
                 if (tmpLog.flag < 0 ){
                     perror("Couldn't create log file. Reason");
                     exit(EXIT_FAILURE);
-                } 
+                }
                 free(eventstr);
-            }
+            } 
             p += sizeof(struct inotify_event) + ev->len;
         }
     }

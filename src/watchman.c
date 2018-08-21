@@ -13,7 +13,7 @@ check_inode_permissions(char * inode_name)
         fstat (fd, &file_stat); 
         return file_stat.st_ino;
     } else
-        return ac; /* aka -1 */
+        return ac;
 }
 
 
@@ -29,9 +29,6 @@ raise_notification(const char * timeinfo, const char *event)
   
     NotifyNotification * display = notify_notification_new(timeinfo, event, NULL);
     notify_notification_show(display, NULL);
-  
-    /* close after delay */
-    //notify_notification_close(display, NULL);
   
     notify_uninit();
 }
@@ -62,8 +59,7 @@ file_check(char * filename)
     file_t f;
     int fd, len;
     void *data;
-  
-  
+ 
     fd = open(filename, O_RDONLY, 0644);
     if (fd < 0){ 
         f.data = strerror(errno); 
@@ -74,7 +70,8 @@ file_check(char * filename)
     len = lseek(fd, 0, SEEK_END);
     data = mmap(0, len, PROT_READ, MAP_PRIVATE, fd, 0);
   
-    f.flag = fd; f.data = data;
+    f.flag = fd; 
+    f.data = data;
   
     return f;
 }
@@ -94,11 +91,12 @@ create_file(char * filename, char * data)
         return f;
     }  
 
-    if (data != NULL){
+    if (data != NULL)
         dprintf(fd, "%s", data);
-    }
   
-    f.flag = fd; f.data = filename;
+    f.flag = fd; 
+    f.data = filename;
+    
     free(path);
     return f;
 }
@@ -119,7 +117,6 @@ parse_yaml_config(char * filename)
     yaml_token_t  token;
    
     /* initialize tokenizer for yaml */
-    /* source: https://stackoverflow.com/questions/20628099/parsing-yaml-to-values-with-libyaml-in-c */
     int state = 0;
     char ** datap;
     char *tk;
@@ -142,10 +139,8 @@ parse_yaml_config(char * filename)
     yaml_parser_set_input_file(&parser, fptr);  
     
     do {
-        // Starting parsing through token method
         yaml_parser_scan(&parser, &token);
      
-        // Check key values against the yml struct.
         switch (token.type){
             case YAML_KEY_TOKEN : 
                 state = 0; 
@@ -156,14 +151,13 @@ parse_yaml_config(char * filename)
             case YAML_SCALAR_TOKEN :
                 tk = token.data.scalar.value;
                 
-                /* check for keys */
                 if (state == 0) {
                     if (!strcmp(tk, "inode"))
                         datap = &config.inode;
                     else if (!strcmp(tk, "event"))
                         datap = &config.event;
-                    else if (!strcmp(tk, "execute"))
-                        datap = &config.execute;
+                    else if (!strcmp(tk, "action"))
+                        datap = &config.action;
                     else {
                         config.return_flag = false;
                         return config;

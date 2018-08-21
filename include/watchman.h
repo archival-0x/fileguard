@@ -33,10 +33,10 @@
 struct 
 yaml_t 
 {
-  char * inode;     /* inode name */
-  char * event;     /* event to watch for */
-  char * execute;   /* command of execution */
-  bool return_flag; /* what's being returned */
+  char * inode;         /* inode name */
+  char * event;         /* event to watch for */
+  char * action;        /* action of execution */
+  bool return_flag;     /* what's being returned */
 };
 
 /* 
@@ -50,16 +50,32 @@ file_t
   char * data;
 };
 
+
 typedef struct yaml_t yaml_t;
 typedef struct file_t file_t;
 
+/* check if we have proper permission to access inode */
 int check_inode_permissions(char * inode_name);
+
+/* fast file creation */
 file_t create_file(char * filename, char *data);
+
+/* check if file exists */
 file_t file_check(char * filename);
+
+/* raise libnotify notification */
 NotifyNotification raise_notification(const char * timeinfo, const char *event);
+
+/* parse event correctly and return value*/
 uint32_t parse_event(char * event);
+
+/* display the event being caught */
 const char * display_event(struct inotify_event *i);
+
+/* time retrieval helper */
 struct tm * gettime(time_t rawtime);
+
+/* parser for YAML configuration */
 yaml_t parse_yaml_config(char * filename);
 
 #endif
