@@ -164,6 +164,8 @@ parse_yaml_config(char * filename)
                         datap = &config.event;
                     else if (!strcmp(tk, "execute"))
                         datap = &config.execute;
+                    else if (!strcmp(tk, "log"))
+                        datap = &config.log;
                     else {
                         config.return_flag = false;
                         return config;
