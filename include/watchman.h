@@ -26,33 +26,27 @@
 #define BUF_LEN             (10 * (sizeof(struct inotify_event) + NAME_MAX + 1))
 #define DEFAULT_FILENAME    "watchman.log"
 
-/*
- * yaml_t struct: used to define key values that are to be returned when
- * parsing a standard watchman configuration file 
-*/
-struct 
-yaml_t 
+/* yaml_t struct: used to define key values that are to be returned when
+ * parsing a standard watchman configuration file
+ */
+typedef struct
 {
   char * inode;         /* inode name */
   char * event;         /* event to watch for */
   char * action;        /* action of execution */
   bool return_flag;     /* what's being returned */
-};
+} yaml_t;
 
-/* 
- * file_t struct: defines the return types of the file when performing File I/O
+
+/* file_t struct: defines the return types of the file when performing File I/O
  * checking operations
-*/
-struct 
-file_t 
+ */
+typedef struct
 {
   int flag;
   char * data;
-};
+} file_t;
 
-
-typedef struct yaml_t yaml_t;
-typedef struct file_t file_t;
 
 /* check if we have proper permission to access inode */
 int check_inode_permissions(char * inode_name);
