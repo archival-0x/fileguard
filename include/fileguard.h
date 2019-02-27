@@ -22,9 +22,9 @@
 #include <glib.h>
 #include <libnotify/notify.h>
 
-#define CONFIG_FILE         "watchman.yml"
+#define CONFIG_FILE         "fileguard.yml"
 #define BUF_LEN             (10 * (sizeof(struct inotify_event) + NAME_MAX + 1))
-#define DEFAULT_FILENAME    "watchman.log"
+#define DEFAULT_FILENAME    "fileguard.log"
 
 /* yaml_t struct: used to define key values that are to be returned when
  * parsing a standard watchman configuration file

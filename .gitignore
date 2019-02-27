@@ -3,4 +3,4 @@
 *.h.gch
 
 my_inode
-watchman
+fileguard

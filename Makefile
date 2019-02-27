@@ -1,9 +1,9 @@
-TARGET    = watchman
+TARGET    = fileguard
 MAIN_SRCS = $(wildcard src/*.c) $(wildcard src/*/*.c)
 MAIN_OBJS = $(MAIN_SRCS:.c=.o)
 
 CC		  = gcc
-CFLAGS    = -I. -Iinclude -I/usr/include/gdk-pixbuf-2.0 `pkg-config --cflags --libs glib-2.0`
+CFLAGS    = -DLOG_USE_COLOR -I. -Iinclude -I/usr/include/gdk-pixbuf-2.0 `pkg-config --cflags --libs glib-2.0`
 LDFLAGS   = -lnotify -lyaml
 
 all: $(MAIN_OBJS)

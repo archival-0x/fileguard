@@ -1,4 +1,4 @@
-#include "watchman.h"
+#include "fileguard.h"
 
 int
 check_inode_permissions(char * inode_name)
@@ -21,7 +21,7 @@ NotifyNotification
 raise_notification(const char * timeinfo, const char *event)
 {
     gboolean nint;
-    nint = notify_init("Watchman");
+    nint = notify_init("fileguard");
 
     if (nint == FALSE) {
         perror("Could not initialize libnotify. Reason");
