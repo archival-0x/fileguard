@@ -1,12 +1,12 @@
 # fileguard
 
-configurable file watcher
+configurable unix file watcher based on inotify
 
 ## intro
 
 __fileguard__ is a file watcher that utilizes the POSIX-standard `inotify` API to watch inodes (a more Linux and _abstract_ way of saying file/directory), and to trigger an action when an event occurs in that inode.
 
-For more on [inotify](https://linux.die.net/man/7/inotify).
+For more on inotify, read [here](https://linux.die.net/man/7/inotify).
 
 ## features
 
@@ -14,12 +14,11 @@ For more on [inotify](https://linux.die.net/man/7/inotify).
 * configurable via YAML config
 * desktop notification over glib
 * (TODO) built-in logger support
-* (TODO) accessible api
 
 ## use cases
 
 * intrusion detection on privileged files, and to trigger a `kill` to the reader process
-* automate build processes as developer writes changes 
+* automate and reproduce builds as developer writes changes to codebase
 
 ## install
 
@@ -54,7 +53,7 @@ Running `./fileguard` will automatically default to the `fileguard.yaml` file wi
 This is the default `CONFIG_FILE` for __fileguard__. When the program is executed, this is the file that is parsed during exeution. To understand how it works and what to specify, read the comments below.
 
     # -- Sets inode to be watched by inotify -- #
-    inode: /root/my_inode
+    inode: my_inode
 
     # -- Include an action that signifies change in an inode -- #
     #    For more information: http://man7.org/linux/man-pages/man7/inotify.7.html
@@ -67,9 +66,9 @@ This is the default `CONFIG_FILE` for __fileguard__. When the program is execute
     action: execute "echo 'Hello world!'"
 
 
-This example config file prints "Hello world!" to the terminal when a `IN_ACCESS` event is detected on the inode `/root/my_inode`.
+This example config file prints "Hello world!" to the terminal when a `IN_ACCESS` event is detected on the inode `my_inode`.
 
-Here are all the support `inotify` events:
+Here are all the supported `inotify` events:
 
     const char * events [] =
     {
