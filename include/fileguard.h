@@ -1,5 +1,5 @@
-#ifndef _WATCHMAN_H
-#define _WATCHMAN_H
+#ifndef _FILEGUARD_H
+#define _FILEGUARD_H
 
 #include <stdio.h>
 #include <string.h>
@@ -27,7 +27,7 @@
 #define DEFAULT_FILENAME    "fileguard.log"
 
 /* yaml_t struct: used to define key values that are to be returned when
- * parsing a standard watchman configuration file
+ * parsing a standard fileguard configuration file
  */
 typedef struct
 {
@@ -58,13 +58,13 @@ file_t create_file(char * filename, char *data);
 file_t file_check(char * filename);
 
 /* raise libnotify notification */
-NotifyNotification raise_notification(const char * timeinfo, const char *event);
+void raise_notification(const char * timeinfo, const char *event);
 
 /* parse event correctly and return value*/
 uint32_t parse_event(char * event);
 
-/* display the event being caught */
-const char * display_event(struct inotify_event *i);
+/* get string of the event being caught */
+const char * get_event(struct inotify_event *i);
 
 /* time retrieval helper */
 struct tm * gettime(time_t rawtime);

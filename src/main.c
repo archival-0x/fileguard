@@ -37,7 +37,7 @@ static void
 usage(char * application_name)
 {
     /* print help to STDOUT */
-    fprintf(stdout, "Usage: (note that these are optional arguments)\n\t %s -[h|v|n] <other.yaml>\n\n"
+    fprintf(stdout, "Usage: (note that these are optional arguments)\n\n\t %s -[h|v|n] <other.yaml>\n\n"
             "-h : Display this help message\n"
             "-v : Turns ON verbosity\n"
             "-n : Turns ON libnotify notifications\n"
@@ -71,7 +71,7 @@ main(int argc, char **argv)
     struct inotify_event *ev;
 
     /* default yaml file to check, parse and tokenize */
-    char *yaml_target;
+    char *yaml_target = NULL;
 
     /* return ints */
     int rd;
@@ -85,32 +85,32 @@ main(int argc, char **argv)
 
     /* argument parsing */
     int c;
-    while ((c = getopt (argc, argv, "hvn")) != -1)
-    switch (c){
+    while ((c = getopt(argc, argv, "hvn")) != -1) {
+       switch (c) {
 
-        /* display help menu */
-        case 'h':
-            usage(argv[0]);
-            exit(EXIT_SUCCESS);
+           /* display help menu */
+           case 'h':
+               usage(argv[0]);
+               exit(EXIT_SUCCESS);
 
-        /* set verbosity flag */
-        case 'v':
-            log_debug("Setting verbosity flag");
-            verbose = 1;
-            break;
+           /* set verbosity flag */
+           case 'v':
+               log_debug("Setting verbosity flag");
+               verbose = 1;
+               break;
 
-        /* set notifier flag */
-        case 'n':
-            log_debug("Setting notifier flag");
-            notifier = 1;
-            break;
+           /* set notifier flag */
+           case 'n':
+               log_debug("Setting notifier flag");
+               notifier = 1;
+               break;
 
-        /* default short to usage */
-        default:
-            usage(argv[0]);
-            exit(EXIT_FAILURE);
-    }
-
+           /* default short to usage */
+           default:
+               usage(argv[0]);
+               exit(EXIT_FAILURE);
+       }
+   }
 
     /* initialize verbosity */
     if (!verbose)
@@ -121,20 +121,23 @@ main(int argc, char **argv)
 
     /* check argument list for any yaml file configuration changes */
     for (int i = 1; i < argc; i++) {
-
         char *dot = strrchr(argv[i], '.');
-        if (dot && !strcmp(dot, ".yaml")) {
-
+        if (dot && strcmp(dot, "yaml")) {
             log_info("yaml file: %s", argv[i]);
-
             yaml_target = argv[i];
             break;
-
         } else {
             yaml_target = CONFIG_FILE;
             break;
         }
     }
+
+   /* print usage and exit if no yaml config found */
+   if (yaml_target == NULL) {
+      usage(argv[0]);
+      fprintf(stderr, "\nError: No required YAML configuration supplied.\n");
+      exit(EXIT_FAILURE);
+   }
 
     printf("Initializing fileguard!\n");
 
@@ -142,7 +145,7 @@ main(int argc, char **argv)
     file_t yaml;
     yaml = file_check(yaml_target);
     if (yaml.flag < 0) {
-        fprintf(stderr, "Error %i: Unable to open file: %s\n", yaml.flag, yaml.data);
+        fprintf(stderr, "Error %i: Unable to open file: %s.\n", yaml.flag, yaml.data);
 
         /* create new file and then quit */
         log_debug("Creating configuration file for you...\n");
@@ -213,7 +216,7 @@ main(int argc, char **argv)
     prepend = strtok(str, " ");
     command = strtok(NULL, "\"");
 
-    if (command == NULL){
+    if (command == NULL) {
         fprintf(stderr, "Command/path cannot be none. Exiting.\n");
         exit(EXIT_FAILURE);
     }
@@ -223,7 +226,7 @@ main(int argc, char **argv)
     char *p;
 
     /* main event loop */
-    while (sc){
+    while (sc) {
         /* read from inotify fd */
         rd = read(fd, buf, BUF_LEN);
         if (rd == 0)
@@ -251,8 +254,8 @@ main(int argc, char **argv)
             ev = (struct inotify_event *) p;
 
             /* display event through terminal*/
-            log_debug("Displaying event through notifier");
-            event = display_event(ev);
+            event = get_event(ev);
+            printf("%s event ocurred\n", event);
 
             /* raise notification if flag was set */
             log_debug("Raising notification");
@@ -262,9 +265,9 @@ main(int argc, char **argv)
             /* check command, if the specified event matches the current event and execute accordingly */
             if ((strcmp(prepend, "execute") == 0) && (strcmp(y.event, event) == 0))
                 system((const char *) command);
-            else if (strcmp(prepend, "log") == 0 ){
+            else if (strcmp(prepend, "log") == 0 ) {
 
-                if ((eventstr = malloc(strlen(ltime) + strlen(event) + 2)) != NULL){
+                if ((eventstr = malloc(strlen(ltime) + strlen(event) + 2)) != NULL) {
                     eventstr[0] = '\0';
                     strcat(eventstr, ltime);
                     strcat(eventstr, event);
